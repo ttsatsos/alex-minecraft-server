@@ -62,6 +62,40 @@ There is no Bedrock username, Floodgate login, or successful join after those li
 - Floodgate is installed.
 - ViaVersion is installed on the test servers.
 
+## RESOLVED (2026-07-03): dual-stack bind on a multi-homed Mac mini
+
+**Root cause.** The server Mac mini is multi-homed -- Wi-Fi `192.168.4.59` plus a
+Tailscale `utun` interface (`100.102.160.47`). With `bedrock.address: 0.0.0.0`,
+Geyser/Netty opened a **dual-stack IPv6 wildcard socket** (`lsof` showed
+`IPv6 UDP *:19133`). It received off-box RakNet requests fine, but replied with
+the wrong source address / interface, so LAN Bedrock clients never saw the
+answer. The client kept retrying the handshake -> `NetherNet / InitialConnection-13`.
+Only the mini talking to itself worked (loopback), which is why every local test
+passed while every off-box client failed.
+
+**How it was proven.** A same-subnet MacBook (`192.168.4.92`):
+- could `ping` the mini (ICMP, 0% loss) and completed a full RakNet handshake to
+  a public Bedrock server (The Hive) -- so the laptop + its firewall were fine;
+- but got zero replies from the mini's `19133`.
+Firewall on the mini was fully disabled. After changing `bedrock.address` to the
+explicit LAN IPv4 `192.168.4.59` and restarting, Geyser logged
+`Started Geyser on 192.168.4.59:19133` and the **same laptop probe completed the
+full handshake**. That one-line change was the only variable.
+
+**Fix.** In each server's `plugins/Geyser-Spigot/config.yml`, set
+`bedrock.address` to the mini's LAN IPv4 `192.168.4.59` (not `0.0.0.0`), and
+restart. Applied to both the clean-test (`19133`, confirmed) and live
+(`19132`) servers.
+
+**Follow-ups.**
+- **Set a DHCP reservation for the mini at `192.168.4.59`** so the pinned
+  address can't drift (a changed lease would silently break Bedrock again).
+- Alternative to pinning the IP: keep `0.0.0.0` but force an IPv4 stack via the
+  JVM flag `-Djava.net.preferIPv4Stack=true`. Pinning the IP is simpler and is
+  what was verified here.
+- The live server must be edited + restarted on the mini for the fix to take
+  effect there (the running process reads its own local config).
+
 ## Findings log
 
 - **2026-07-03 — Fault isolated to inbound at the server Mac mini / LAN path.**
