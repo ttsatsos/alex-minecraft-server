@@ -1,0 +1,15 @@
+name: LocalAiNpc
+version: 0.1.0
+main: com.local.minecraft.ainpc.LocalAiNpcPlugin
+api-version: '1.21'
+softdepend:
+  - Citizens
+  - Sentinel
+commands:
+  ainpc:
+    description: Manage AI-backed Citizens NPC companions.
+    usage: /ainpc <create|createwild|bind|owner|model|prompt|combat|status|reload>
+    permission: localainpc.admin
+permissions:
+  localainpc.admin:
+    default: op

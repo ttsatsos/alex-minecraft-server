@@ -1,0 +1,11 @@
+name: StatStealSmp
+version: 0.1.0
+main: com.local.minecraft.statsteal.StatStealPlugin
+api-version: '1.21'
+commands:
+  statsteal:
+    description: View or manage StatSteal SMP data.
+    usage: /statsteal <stats|reload|resetplayer|resetall>
+permissions:
+  statsteal.admin:
+    default: op

@@ -1,0 +1,60 @@
+# macOS / editor noise
+.DS_Store
+*.swp
+*.tmp
+
+# Secrets and auth/session caches
+**/.env
+**/.env.*
+!**/.env.example
+ai-bot/profiles/
+**/.console_history
+
+# Minecraft generated/runtime state
+**/logs/
+**/cache/
+**/libraries/
+**/versions/
+**/.paper-remapped/
+**/world/
+**/world_nether/
+**/world_the_end/
+**/usercache.json
+**/ops.json
+**/whitelist.json
+**/banned-players.json
+**/banned-ips.json
+**/eula.txt
+**/version_history.json
+**/session.lock
+**/uid.dat
+**/plugins/floodgate/key.pem
+**/plugins/spark/tmp/
+
+# Large binaries and downloaded dependencies
+*.jar
+*.tar.gz
+*.zip
+runtime/
+downloads/
+tools/
+.local-tools/
+ollama-data/
+backups/
+transfer/
+bridge-update-backups/
+bridge-update-downloads/
+plugin-updates/
+generated-worlds/
+
+# Build outputs
+**/target/
+**/node_modules/
+
+# Local server copies / snapshots that are too large for GitHub troubleshooting
+minecraft-server-clean/
+minecraft-server-stable-test/
+minecraft-server.pre-*/
+bedrock-clean-test-server-19134/
+
+# Keep source/config for the live and clean-test servers, but not runtime data.

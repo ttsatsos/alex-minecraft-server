@@ -1,0 +1,47 @@
+steal:
+  require-player-kill: true
+  announce-to-server: true
+  restore-health-on-steal: true
+  message-prefix: "&6[StatSteal]&r "
+  excluded-player-names:
+    - "Bot"
+  excluded-player-name-prefixes:
+    - "Bot"
+
+stats:
+  max-health:
+    enabled: true
+    steal-amount: 5.0
+    min-value: 5.0
+    max-value: 45.0
+    display-name: "Max Health"
+  attack-damage:
+    enabled: true
+    steal-amount: 0.25
+    min-value: 0.0
+    max-value: 2.25
+    display-name: "Attack Damage"
+  movement-speed:
+    enabled: true
+    steal-amount: 0.025
+    min-value: 0.0
+    max-value: 0.225
+    display-name: "Movement Speed"
+  attack-speed:
+    enabled: false
+    steal-amount: 0.1
+    min-value: 2.0
+    max-value: 8.0
+    display-name: "Attack Speed"
+  armor:
+    enabled: true
+    steal-amount: 5.0
+    min-value: -25.0
+    max-value: 25.0
+    display-name: "Armor"
+  luck:
+    enabled: false
+    steal-amount: 1.0
+    min-value: -5.0
+    max-value: 10.0
+    display-name: "Luck"

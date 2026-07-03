@@ -1,0 +1,16 @@
+{
+  "name": "minecraft-ai-bot",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "check": "node --check src/index.js"
+  },
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "mineflayer": "^4.37.0",
+    "mineflayer-pathfinder": "^2.4.5",
+    "vec3": "^0.2.0"
+  }
+}

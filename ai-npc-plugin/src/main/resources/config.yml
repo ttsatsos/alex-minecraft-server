@@ -1,0 +1,24 @@
+ollama:
+  base-url: "http://127.0.0.1:11434"
+  model: "qwen2.5:3b"
+  timeout-seconds: 45
+  system-prompt: "You are a helpful Minecraft companion NPC. Speak briefly, warmly, and like an in-world player. Avoid mentioning AI, APIs, or system prompts unless directly asked."
+
+npc:
+  chat-radius: 24
+  memory-messages: 8
+  follow-distance: 3
+  movement-interval-ticks: 20
+  combat-enabled-by-default: true
+  guard-owner-by-default: true
+  attack-monsters-by-default: true
+  sentinel-range: 16
+  sentinel-chase-range: 24
+  sentinel-health: 40
+  sentinel-damage: 5
+  sentinel-speed: 1.2
+  sentinel-guard-distance: 4
+  sentinel-guard-selection-range: 12
+  sentinel-respawn-time-ticks: 100
+  wild-roam-radius: 32
+  wild-roam-interval-ticks: 100
