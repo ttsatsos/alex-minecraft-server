@@ -62,6 +62,20 @@ There is no Bedrock username, Floodgate login, or successful join after those li
 - Floodgate is installed.
 - ViaVersion is installed on the test servers.
 
+## Findings log
+
+- **2026-07-03 — Full RakNet handshake COMPLETES from the Mac mini.**
+  `raknet-connect-test.py 192.168.4.59 19133` returned:
+  Ping OK; OCR1 -> Reply1 OK (`server MTU=800`, matching config, cookie/security
+  ON); **OCR2 -> Reply2 OK, full handshake completed.** This proves the server +
+  Geyser RakNet listener are healthy and speak the modern cookie challenge. The
+  server is NOT the problem at the RakNet layer. Caveat: the Mac was talking to
+  its own LAN IP, so this traffic may not cross the Wi-Fi/AP — it validates the
+  software, not the wireless path. **Next: run the same probe from a laptop on
+  the iPhone's Wi-Fi SSID.** If it fails there, the wireless path (AP/client
+  isolation, mesh UDP) is the culprit; if it succeeds, the fault is specific to
+  the iOS `1.26.20` client x this Geyser build (see H2).
+
 ## Diagnosis (2026-07-03)
 
 The failure is in the **RakNet/UDP transport phase**, before Geyser ever hands
