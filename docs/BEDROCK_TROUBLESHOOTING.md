@@ -64,6 +64,33 @@ There is no Bedrock username, Floodgate login, or successful join after those li
 
 ## Findings log
 
+- **2026-07-03 — Fault isolated to inbound at the server Mac mini / LAN path.**
+  A MacBook laptop on the *same* subnet/SSID (`192.168.4.92`, gateway
+  `192.168.4.1`, not guest) as the iPhone (`192.168.4.69`) and mini
+  (`192.168.4.59`):
+  - `raknet-probe.py 192.168.4.59 19133` -> **Ping FAILED (no reply).** Cannot
+    reach the mini's Bedrock port at all.
+  - Control test `raknet-probe.py geo.hivebedrock.network 19132` -> **FULL
+    HANDSHAKE COMPLETED** (MTU 1400, cookie ON). So the laptop's UDP + its own
+    firewall are healthy; it is a good test rig.
+  Conclusion: the problem is NOT Geyser, MTU, the iOS client, or the test rig.
+  Something drops inbound UDP to the mini from LAN clients. The mini's own
+  loopback handshake (below) succeeds because loopback skips the firewall and
+  the air. Remaining candidates: (1) macOS Application Firewall on the mini
+  dropping inbound UDP (e.g. `java` denied the "accept incoming connections"
+  prompt, or block-all/stealth on); (2) mesh **client isolation**. Next: check
+  the mini firewall (`socketfilterfw --getglobalstate/--getblockall/
+  --getstealthmode`); if enabled, disable and re-test from the laptop. If
+  already off, disable client/device isolation in the mesh app.
+  **Mini firewall checked: DISABLED (state 0, block-all off, stealth off) --
+  ruled out.** Prime remaining suspect: mesh **client/device isolation** (often
+  applied via a guest/IoT or parental-control profile -- relevant here since the
+  server runs on the son's Mac mini). Next: from the laptop `ping -c 3
+  192.168.4.59` (firewall is off, so ICMP is a valid reachability test) and on
+  the mini `lsof -nP -iUDP:19133 -iUDP:19132` to confirm Geyser is bound; then
+  turn off client isolation / remove any restrictive device profile in the mesh
+  app.
+
 - **2026-07-03 — Full RakNet handshake COMPLETES from the Mac mini.**
   `raknet-connect-test.py 192.168.4.59 19133` returned:
   Ping OK; OCR1 -> Reply1 OK (`server MTU=800`, matching config, cookie/security
