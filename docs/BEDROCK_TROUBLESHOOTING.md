@@ -87,6 +87,13 @@ full handshake**. That one-line change was the only variable.
 restart. Applied to both the clean-test (`19133`, confirmed) and live
 (`19132`) servers.
 
+**End-to-end confirmed.** After the bind fix, the iPhone (`1.26.20`, iOS 26.5)
+successfully joined the clean-test server via a fresh Servers-tab entry to
+`192.168.4.59:19133`. A leftover step surfaced one more error -- `U-000`, caused
+by a stale/duplicate server entry in the Bedrock list (not a network issue);
+deleting the old "alex macmini" entry, restarting the app, and re-adding a
+single clean entry resolved it.
+
 **Follow-ups.**
 - **Set a DHCP reservation for the mini at `192.168.4.59`** so the pinned
   address can't drift (a changed lease would silently break Bedrock again).
