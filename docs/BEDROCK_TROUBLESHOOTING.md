@@ -18,7 +18,9 @@ Clean Bedrock test server:
 - Java: `192.168.4.59:25566`
 - Bedrock: `192.168.4.59:19133`
 - Geyser config: `bedrock-clean-test-server/plugins/Geyser-Spigot/config.yml`
+- Current Geyser bind address: `0.0.0.0`
 - Current Geyser MTU: `800`
+- Current Bedrock compression level: `-1`
 
 ## What Works
 
@@ -77,6 +79,11 @@ for poor-network or connection-stall behavior. We lowered:
 - Live server: `1200` to `1000`
 - Clean test: `1200` to `1000`, then `800`
 
+The latest clean-test diagnostic also changed:
+
+- `bedrock.address` from `192.168.4.59` to `0.0.0.0`
+- `advanced.bedrock.compression-level` from `6` to `-1`
+
 ## Useful Local Commands
 
 Check listeners:
@@ -112,4 +119,3 @@ python3 scripts/bedrock-ping.py 192.168.4.59 19133
 - `scripts/start-server.sh`
 - `scripts/start-clean-server.sh`
 - `README.md`
-
