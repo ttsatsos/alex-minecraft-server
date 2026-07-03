@@ -81,7 +81,10 @@ IP is simpler and is what was verified.
    reservation for the mini at that address is required (TODO for the owner in
    the mesh app). If the lease changes, both servers break identically until the
    `address` lines are updated.
-3. Don't commit runtime state or secrets (see `.gitignore`); never commit
+3. **Don't run the servers via launchd from `~/Documents`.** macOS TCC blocks
+   launchd jobs from reading `~/Documents`, so the LaunchAgent crash-loops
+   (exit 127). Use `nohup` for headless (see "Operating the servers").
+4. Don't commit runtime state or secrets (see `.gitignore`); never commit
    `plugins/floodgate/key.pem`.
 
 ## Operating the servers
@@ -94,21 +97,35 @@ Start (foreground, interactive console):
 cd bedrock-clean-test-server && ../runtime/jdk-21.0.10+7/Contents/Home/bin/java -Xms1G -Xmx2G -jar paper.jar --nogui
 ```
 
-Run the **live server headless** (survives closing the terminal) via a **user
-LaunchAgent** — no admin needed. The plist is `launchd/com.local.minecraft.paper.plist`
-(`RunAtLoad` + `KeepAlive`):
+Run the **live server headless** (survives closing the terminal) with **`nohup`
+from an interactive Terminal** — this is the approach that actually works on this
+box (see the launchd warning below). Stop the foreground server first (`stop` in
+its console), then:
 
 ```bash
-mkdir -p ~/Library/LaunchAgents
-cp launchd/com.local.minecraft.paper.plist ~/Library/LaunchAgents/
-launchctl load ~/Library/LaunchAgents/com.local.minecraft.paper.plist
-# stop it (KeepAlive means a plain `kill` just respawns it):
-launchctl unload ~/Library/LaunchAgents/com.local.minecraft.paper.plist
+cd /Users/alextsatsos1/Documents/Codex/2026-04-26/help-us-set-up-a-minecraft
+nohup ./scripts/start-server.sh > minecraft-server/server-nohup.out 2>&1 &
+disown
+sleep 15 && lsof -nP -iUDP:19132   # want IPv4 192.168.4.59:19132
 ```
 
-Caveats: a user LaunchAgent only runs while the user is logged in; for
-auto-start after reboot, enable automatic login (needs admin) and disable sleep
-in Energy settings. Logs go to `minecraft-server/launchd-stdout.log`.
+After that the terminal windows can be closed. Watch logs with
+`tail -f minecraft-server/server-nohup.out`; stop with
+`lsof -nP -iUDP:19132` then `kill <PID>`. Limitation: `nohup` survives closing
+the window but **not** a reboot/logout, and does not auto-restart on crash.
+
+**DO NOT use the launchd LaunchAgent here (it fails).** The plist
+`launchd/com.local.minecraft.paper.plist` looks tempting, but launchd background
+jobs are blocked by macOS TCC from reading files under `~/Documents/` — and this
+project lives at `~/Documents/Codex/...`. Loading it produces a crash loop with
+exit **127** and `"/bin/zsh: can't open input file: .../scripts/start-server.sh"`
+in `launchd-stderr.log`, and nothing serves (which reads as "server up but no one
+can log in"). Granting access needs Full Disk Access (admin, unavailable here).
+launchd only becomes viable if the project is **moved out of `~/Documents`**
+(e.g. `/Users/Shared/minecraft` or `~/minecraft`) or admin is obtained. Until
+then, use `nohup`. To recover if the agent was loaded:
+`launchctl unload ~/Library/LaunchAgents/com.local.minecraft.paper.plist && rm ~/Library/LaunchAgents/com.local.minecraft.paper.plist`,
+then start with `nohup` as above.
 
 ## Diagnostic tools
 

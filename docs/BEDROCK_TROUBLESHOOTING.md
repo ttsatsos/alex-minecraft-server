@@ -105,6 +105,20 @@ single clean entry resolved it.
 
 ## Findings log
 
+- **2026-07-03 — launchd headless attempt FAILED (macOS TCC).** Installing the
+  `launchd/com.local.minecraft.paper.plist` as a user LaunchAgent crash-looped:
+  `launchctl list` showed exit **127**, and `minecraft-server/launchd-stderr.log`
+  was full of `"/bin/zsh: can't open input file: .../scripts/start-server.sh"`.
+  Cause: macOS TCC blocks launchd background jobs from reading files under
+  `~/Documents/`, and this project lives at `~/Documents/Codex/...`. The
+  interactive Terminal has that access (manual starts work) but launchd does not,
+  and granting it needs Full Disk Access (admin, unavailable). Symptom to a user:
+  "server looks up but nobody can log in" -- because nothing is actually serving.
+  Recovery: `launchctl unload` + `rm` the plist, then run headless with
+  `nohup ./scripts/start-server.sh > minecraft-server/server-nohup.out 2>&1 &`
+  from Terminal. launchd only becomes viable if the project is moved out of
+  `~/Documents` or admin is obtained. See AGENTS.md "Operating the servers".
+
 - **2026-07-03 — Fault isolated to inbound at the server Mac mini / LAN path.**
   A MacBook laptop on the *same* subnet/SSID (`192.168.4.92`, gateway
   `192.168.4.1`, not guest) as the iPhone (`192.168.4.69`) and mini
