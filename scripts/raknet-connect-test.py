@@ -7,9 +7,14 @@ fails. This tool walks the actual pre-login RakNet handshake stage by stage
 and reports exactly which step stops responding, plus the MTU that survives
 the network path:
 
-    1. Unconnected Ping         -> Unconnected Pong          (0x01 -> 0x1c)
-    2. Open Connection Request 1 -> Open Connection Reply 1  (0x05 -> 0x06)
-    3. Open Connection Request 2 -> Open Connection Reply 2  (0x07 -> 0x08)
+    1. Unconnected Ping          -> Unconnected Pong          (0x01 -> 0x1c)
+    2. Open Connection Request 1 -> Open Connection Reply 1   (0x05 -> 0x06)
+    3. Open Connection Request 2 -> Open Connection Reply 2   (0x07 -> 0x08)
+
+Modern Bedrock RakNet added a "security cookie" challenge: Reply 1 can carry a
+4-byte cookie that the client MUST echo back in Request 2, or the server
+silently drops it. This probe handles that (older probes that don't will look
+like the handshake dies at Request 2 even on a healthy server).
 
 If the client gets an Unconnected Pong (the server shows in the world list)
 but the handshake dies at step 2 or 3, the problem is the RakNet transport
@@ -17,11 +22,14 @@ between this host and the server -- not the address, port, or Geyser config.
 
 WHY RUN THIS FROM TWO PLACES:
   * On the Mac mini itself (or another wired LAN host): the handshake should
-    complete at a high MTU. If it does, the server + Geyser are healthy.
+    complete. If it does, the server + Geyser are healthy over that path.
   * On a laptop/phone-hotspot joined to the SAME Wi-Fi/mesh SSID the failing
     iOS device uses: this replicates the iOS network path. If it stalls at the
     same step, the fault is the wireless path (AP/client isolation, mesh UDP
     handling, or path MTU), not Geyser.
+
+Always target the LAN IP (192.168.4.59), never a Tailscale 100.x address --
+the tunnel's 1280 MTU and relaying will skew the result.
 
 Usage:
     python3 scripts/raknet-connect-test.py HOST PORT
@@ -63,6 +71,11 @@ DEFAULT_RAKNET_PROTOCOL = 11
 # A fixed pseudo-GUID for this "client". Any stable 64-bit value works.
 CLIENT_GUID = 0x1234567890ABCDEF
 
+# Sane MTU window. Reply 1 sometimes advertises the server's internal max
+# (which can be large); clamp what we echo in Request 2 to a real-world value.
+MTU_MIN = 400
+MTU_MAX = 1400
+
 TIMEOUT = 2.0
 RETRIES = 3
 
@@ -70,8 +83,8 @@ RETRIES = 3
 def _recv(sock: socket.socket, expect_id: int):
     """Wait for a datagram with the given leading packet id.
 
-    Returns (payload_bytes, addr) or None on timeout / unexpected id.
-    ID_INCOMPATIBLE_PROTOCOL_VERSION is surfaced so the caller can retry.
+    Returns (tag, payload_bytes, addr) where tag is "ok", "unexpected", or
+    "incompatible", or None on timeout.
     """
     try:
         data, addr = sock.recvfrom(4096)
@@ -106,10 +119,25 @@ def unconnected_ping(sock: socket.socket, host: str, port: int) -> bool:
     return False
 
 
+def _parse_reply1(data: bytes):
+    """Reply 1: id(1) magic(16) serverGuid(8) security(1) [cookie(4)] mtu(2).
+
+    Returns (server_mtu, server_guid, has_security, cookie). The MTU is always
+    the trailing short, which is the robust place to read it from.
+    """
+    server_guid = struct.unpack(">q", data[17:25])[0]
+    has_security = data[25] != 0
+    cookie = 0
+    if has_security:
+        cookie = struct.unpack(">I", data[26:30])[0]
+    server_mtu = struct.unpack(">H", data[-2:])[0]
+    return server_mtu, server_guid, has_security, cookie
+
+
 def open_connection_request_1(
     sock: socket.socket, host: str, port: int, target_mtu: int, protocol: int
 ):
-    """Send OCR1 padded to `target_mtu`. Returns ('ok', server_mtu, guid) etc."""
+    """Send OCR1 padded to `target_mtu`. Returns a tagged tuple."""
     header = bytes([ID_OPEN_CONNECTION_REQUEST_1]) + MAGIC + bytes([protocol])
     pad_len = max(0, (target_mtu - UDP_IP_OVERHEAD) - len(header))
     packet = header + (b"\x00" * pad_len)
@@ -121,14 +149,11 @@ def open_connection_request_1(
             continue
         kind, data = result[0], result[1]
         if kind == "incompatible":
-            server_proto = data[1]
-            return ("incompatible", server_proto)
+            return ("incompatible", data[1])
         if kind == "unexpected":
             return ("unexpected", data[0])
-        # Reply 1: id(1) magic(16) serverGuid(8) security(1) mtu(2)
-        server_guid = struct.unpack(">q", data[17:25])[0]
-        server_mtu = struct.unpack(">H", data[26:28])[0]
-        return ("ok", server_mtu, server_guid)
+        server_mtu, server_guid, has_security, cookie = _parse_reply1(data)
+        return ("ok", server_mtu, server_guid, has_security, cookie)
     return ("timeout",)
 
 
@@ -140,12 +165,20 @@ def _encode_raknet_address(host: str, port: int) -> bytes:
 
 
 def open_connection_request_2(
-    sock: socket.socket, host: str, port: int, mtu: int
+    sock: socket.socket,
+    host: str,
+    port: int,
+    mtu: int,
+    has_security: bool,
+    cookie: int,
 ) -> bool:
-    packet = (
-        bytes([ID_OPEN_CONNECTION_REQUEST_2])
-        + MAGIC
-        + _encode_raknet_address(host, port)
+    """Send OCR2. If the server issued a cookie, echo it back (required)."""
+    packet = bytes([ID_OPEN_CONNECTION_REQUEST_2]) + MAGIC
+    if has_security:
+        # Echo the server cookie, then a "client has no security challenge" bool.
+        packet += struct.pack(">I", cookie) + bytes([0])
+    packet += (
+        _encode_raknet_address(host, port)
         + struct.pack(">H", mtu)
         + struct.pack(">q", CLIENT_GUID)
     )
@@ -171,19 +204,28 @@ def run(host: str, port: int, mtu_ladder: list[int]) -> int:
             return 1
 
         protocol = DEFAULT_RAKNET_PROTOCOL
-        negotiated_mtu = None
+        server_mtu = None
+        has_security = False
+        cookie = 0
         highest_ok = None
+
+        def record(res, target):
+            nonlocal server_mtu, has_security, cookie, highest_ok
+            server_mtu = res[1]
+            has_security = res[3]
+            cookie = res[4]
+            highest_ok = target
+            sec = "cookie/security ON" if has_security else "no security"
+            print(
+                f"  [2/3] OCR1 @ payload~{target}B -> Reply1 OK   "
+                f"server MTU={server_mtu}, {sec}"
+            )
+
         for target in mtu_ladder:
             res = open_connection_request_1(sock, host, port, target, protocol)
             tag = res[0]
             if tag == "ok":
-                server_mtu = res[1]
-                highest_ok = target
-                negotiated_mtu = server_mtu
-                print(
-                    f"  [2/3] OCR1 @ payload~{target}B -> Reply1 OK   "
-                    f"server MTU={server_mtu}"
-                )
+                record(res, target)
                 break
             if tag == "incompatible":
                 server_proto = res[1]
@@ -194,12 +236,7 @@ def run(host: str, port: int, mtu_ladder: list[int]) -> int:
                 protocol = server_proto
                 res2 = open_connection_request_1(sock, host, port, target, protocol)
                 if res2[0] == "ok":
-                    highest_ok = target
-                    negotiated_mtu = res2[1]
-                    print(
-                        f"  [2/3] OCR1 @ payload~{target}B -> Reply1 OK   "
-                        f"server MTU={negotiated_mtu}"
-                    )
+                    record(res2, target)
                     break
                 print(
                     "\nRESULT: Server reports an INCOMPATIBLE RakNet protocol "
@@ -214,10 +251,9 @@ def run(host: str, port: int, mtu_ladder: list[int]) -> int:
                     f"0x{res[1]:02x}"
                 )
                 continue
-            # timeout at this MTU: try the next-smaller rung.
             print(f"  [2/3] OCR1 @ payload~{target}B -> Reply1 timeout (dropped)")
 
-        if negotiated_mtu is None:
+        if server_mtu is None:
             print(
                 "\nRESULT: Handshake stalls at Open Connection Request 1 for every "
                 "MTU.\n        The server SEES the ping but its Reply 1 never gets "
@@ -237,9 +273,13 @@ def run(host: str, port: int, mtu_ladder: list[int]) -> int:
                 f"Geyser advanced.bedrock.mtu\n        toward this value."
             )
 
-        if open_connection_request_2(sock, host, port, negotiated_mtu):
+        # Echo a sane MTU in OCR2 (Reply 1 may advertise a large internal max).
+        ocr2_mtu = max(MTU_MIN, min(server_mtu, MTU_MAX))
+        if open_connection_request_2(
+            sock, host, port, ocr2_mtu, has_security, cookie
+        ):
             print(
-                f"  [3/3] OCR2 @ MTU={negotiated_mtu} -> Reply2 OK   "
+                f"  [3/3] OCR2 @ MTU={ocr2_mtu} -> Reply2 OK   "
                 "full handshake completed"
             )
             print(
@@ -251,14 +291,13 @@ def run(host: str, port: int, mtu_ladder: list[int]) -> int:
             )
             return 0
 
-        print(
-            f"  [3/3] OCR2 @ MTU={negotiated_mtu} -> Reply2 FAILED (no reply)"
-        )
+        print(f"  [3/3] OCR2 @ MTU={ocr2_mtu} -> Reply2 FAILED (no reply)")
         print(
             "\nRESULT: Handshake reaches Open Connection Request 2 but Reply 2 "
-            "never\n        arrives. The RakNet session cannot be established over "
-            "this path.\n        Same transport-fault conclusion as above; verify "
-            "on a wired host."
+            "never\n        arrives. If this happens even from the Mac itself, the "
+            "fault is\n        server-side (Geyser/RakNet), not the wireless path. "
+            "If it only\n        happens from the wireless host, the path is the "
+            "culprit."
         )
         return 1
     finally:
