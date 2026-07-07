@@ -3,6 +3,10 @@
 *.swp
 *.tmp
 
+# Python bytecode cache (from diagnostic scripts)
+__pycache__/
+*.pyc
+
 # Secrets and auth/session caches
 **/.env
 **/.env.*

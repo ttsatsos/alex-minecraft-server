@@ -62,27 +62,216 @@ There is no Bedrock username, Floodgate login, or successful join after those li
 - Floodgate is installed.
 - ViaVersion is installed on the test servers.
 
-## Current Hypothesis
+## RESOLVED (2026-07-03): dual-stack bind on a multi-homed Mac mini
 
-This looks like a RakNet/UDP handshake transport problem between iOS Bedrock and Geyser on the local Wi-Fi/mesh network, not a Paper gameplay/plugin problem.
+**Root cause.** The server Mac mini is multi-homed -- Wi-Fi `192.168.4.59` plus a
+Tailscale `utun` interface (`100.102.160.47`). With `bedrock.address: 0.0.0.0`,
+Geyser/Netty opened a **dual-stack IPv6 wildcard socket** (`lsof` showed
+`IPv6 UDP *:19133`). It received off-box RakNet requests fine, but replied with
+the wrong source address / interface, so LAN Bedrock clients never saw the
+answer. The client kept retrying the handshake -> `NetherNet / InitialConnection-13`.
+Only the mini talking to itself worked (loopback), which is why every local test
+passed while every off-box client failed.
 
-The official Geyser common-issues guidance recommends lowering:
+**How it was proven.** A same-subnet MacBook (`192.168.4.92`):
+- could `ping` the mini (ICMP, 0% loss) and completed a full RakNet handshake to
+  a public Bedrock server (The Hive) -- so the laptop + its firewall were fine;
+- but got zero replies from the mini's `19133`.
+Firewall on the mini was fully disabled. After changing `bedrock.address` to the
+explicit LAN IPv4 `192.168.4.59` and restarting, Geyser logged
+`Started Geyser on 192.168.4.59:19133` and the **same laptop probe completed the
+full handshake**. That one-line change was the only variable.
 
-```yaml
-advanced:
-  bedrock:
-    mtu: ...
-```
+**Fix.** In each server's `plugins/Geyser-Spigot/config.yml`, set
+`bedrock.address` to the mini's LAN IPv4 `192.168.4.59` (not `0.0.0.0`), and
+restart. Applied to both the clean-test (`19133`, confirmed) and live
+(`19132`) servers.
 
-for poor-network or connection-stall behavior. We lowered:
+**End-to-end confirmed.** After the bind fix, the iPhone (`1.26.20`, iOS 26.5)
+successfully joined the clean-test server via a fresh Servers-tab entry to
+`192.168.4.59:19133`. A leftover step surfaced one more error -- `U-000`, caused
+by a stale/duplicate server entry in the Bedrock list (not a network issue);
+deleting the old "alex macmini" entry, restarting the app, and re-adding a
+single clean entry resolved it.
 
-- Live server: `1200` to `1000`
-- Clean test: `1200` to `1000`, then `800`
+**Follow-ups.**
+- **Set a DHCP reservation for the mini at `192.168.4.59`** so the pinned
+  address can't drift (a changed lease would silently break Bedrock again).
+- Alternative to pinning the IP: keep `0.0.0.0` but force an IPv4 stack via the
+  JVM flag `-Djava.net.preferIPv4Stack=true`. Pinning the IP is simpler and is
+  what was verified here.
+- The live server must be edited + restarted on the mini for the fix to take
+  effect there (the running process reads its own local config).
 
-The latest clean-test diagnostic also changed:
+## Findings log
 
-- `bedrock.address` from `192.168.4.59` to `0.0.0.0`
-- `advanced.bedrock.compression-level` from `6` to `-1`
+- **2026-07-03 — launchd headless attempt FAILED (macOS TCC).** Installing the
+  `launchd/com.local.minecraft.paper.plist` as a user LaunchAgent crash-looped:
+  `launchctl list` showed exit **127**, and `minecraft-server/launchd-stderr.log`
+  was full of `"/bin/zsh: can't open input file: .../scripts/start-server.sh"`.
+  Cause: macOS TCC blocks launchd background jobs from reading files under
+  `~/Documents/`, and this project lives at `~/Documents/Codex/...`. The
+  interactive Terminal has that access (manual starts work) but launchd does not,
+  and granting it needs Full Disk Access (admin, unavailable). Symptom to a user:
+  "server looks up but nobody can log in" -- because nothing is actually serving.
+  Recovery: `launchctl unload` + `rm` the plist, then run headless with
+  `nohup ./scripts/start-server.sh > minecraft-server/server-nohup.out 2>&1 &`
+  from Terminal. launchd only becomes viable if the project is moved out of
+  `~/Documents` or admin is obtained. See AGENTS.md "Operating the servers".
+
+- **2026-07-03 — Fault isolated to inbound at the server Mac mini / LAN path.**
+  A MacBook laptop on the *same* subnet/SSID (`192.168.4.92`, gateway
+  `192.168.4.1`, not guest) as the iPhone (`192.168.4.69`) and mini
+  (`192.168.4.59`):
+  - `raknet-probe.py 192.168.4.59 19133` -> **Ping FAILED (no reply).** Cannot
+    reach the mini's Bedrock port at all.
+  - Control test `raknet-probe.py geo.hivebedrock.network 19132` -> **FULL
+    HANDSHAKE COMPLETED** (MTU 1400, cookie ON). So the laptop's UDP + its own
+    firewall are healthy; it is a good test rig.
+  Conclusion: the problem is NOT Geyser, MTU, the iOS client, or the test rig.
+  Something drops inbound UDP to the mini from LAN clients. The mini's own
+  loopback handshake (below) succeeds because loopback skips the firewall and
+  the air. Remaining candidates: (1) macOS Application Firewall on the mini
+  dropping inbound UDP (e.g. `java` denied the "accept incoming connections"
+  prompt, or block-all/stealth on); (2) mesh **client isolation**. Next: check
+  the mini firewall (`socketfilterfw --getglobalstate/--getblockall/
+  --getstealthmode`); if enabled, disable and re-test from the laptop. If
+  already off, disable client/device isolation in the mesh app.
+  **Mini firewall checked: DISABLED (state 0, block-all off, stealth off) --
+  ruled out.** Prime remaining suspect: mesh **client/device isolation** (often
+  applied via a guest/IoT or parental-control profile -- relevant here since the
+  server runs on the son's Mac mini). Next: from the laptop `ping -c 3
+  192.168.4.59` (firewall is off, so ICMP is a valid reachability test) and on
+  the mini `lsof -nP -iUDP:19133 -iUDP:19132` to confirm Geyser is bound; then
+  turn off client isolation / remove any restrictive device profile in the mesh
+  app.
+
+- **2026-07-03 — Full RakNet handshake COMPLETES from the Mac mini.**
+  `raknet-connect-test.py 192.168.4.59 19133` returned:
+  Ping OK; OCR1 -> Reply1 OK (`server MTU=800`, matching config, cookie/security
+  ON); **OCR2 -> Reply2 OK, full handshake completed.** This proves the server +
+  Geyser RakNet listener are healthy and speak the modern cookie challenge. The
+  server is NOT the problem at the RakNet layer. Caveat: the Mac was talking to
+  its own LAN IP, so this traffic may not cross the Wi-Fi/AP — it validates the
+  software, not the wireless path. **Next: run the same probe from a laptop on
+  the iPhone's Wi-Fi SSID.** If it fails there, the wireless path (AP/client
+  isolation, mesh UDP) is the culprit; if it succeeds, the fault is specific to
+  the iOS `1.26.20` client x this Geyser build (see H2).
+
+## Diagnosis (2026-07-03)
+
+The failure is in the **RakNet/UDP transport phase**, before Geyser ever hands
+the player to Bedrock login or Floodgate. The evidence lines up cleanly:
+
+- The unconnected ping (`bedrock-ping.py`) is a **single tiny UDP round-trip**
+  and it works — that only proves the port is open and Geyser is advertising.
+- The real join needs the multi-step RakNet handshake
+  (`OpenConnectionRequest1 -> Reply1 -> Request2 -> Reply2` -> session). The
+  logs show it looping on the early "tried to connect!" step and never reaching
+  a Bedrock username / Floodgate login. **A handshake that keeps restarting is
+  the "pings but won't join" signature.**
+- Java (TCP) works because TCP retransmits and does path-MTU discovery; the
+  Bedrock path (UDP) has neither and is far more sensitive to a lossy or
+  size-limited network segment.
+- `NetherNet / InitialConnection-13` is the client-side label for "the initial
+  connection never established." It is generic — it does **not** by itself mean
+  the client chose the NetherNet (WebRTC) transport; the client's own
+  `Transport: RakNet:975` line shows it is on RakNet.
+
+### Two leading hypotheses, ranked
+
+**H1 — Wi-Fi/mesh network path drops the RakNet handshake (most likely).**
+Ping (one small packet) survives, but the burst of handshake datagrams does
+not. Common causes on a mesh/Wi-Fi LAN: AP/client isolation, a mesh node
+mishandling UDP between wireless clients, or a path-MTU limit. The server sees
+the client's request but its reply (or the client's follow-up) is lost, so the
+client restarts from step 1 — exactly the observed loop.
+
+**H2 — Upstream Geyser × newest-Bedrock (26.x) handshake bug.** The iOS client
+here is `1.26.20`; the same `InitialConnection-*` symptom with the newest 26.x
+Bedrock builds and no server-side login logs is reported upstream (e.g.
+GeyserMC/Geyser issues [#6479](https://github.com/GeyserMC/Geyser/issues/6479)
+and [#6457](https://github.com/GeyserMC/Geyser/issues/6457)). If H1 is ruled
+out, this is the fallback: a client/Geyser protocol mismatch, not a local
+config error.
+
+### Decisive tests (do these first — they split H1 from H2)
+
+1. **Run the new staged handshake probe from the Mac itself:**
+
+   ```bash
+   python3 scripts/raknet-connect-test.py 192.168.4.59 19133
+   ```
+
+   It walks Ping -> OCR1/Reply1 -> OCR2/Reply2 and prints exactly which step
+   stalls and the negotiated MTU. From the Mac (loopback/wired), this should
+   complete. If it completes here but iOS fails, the server + Geyser are healthy
+   and the fault is downstream of Geyser (network path or H2).
+
+2. **Run the same probe from a second device joined to the exact Wi-Fi/mesh
+   SSID the iPhone uses** (a laptop on that SSID). If it stalls at the same step
+   the iPhone does, **H1 is confirmed — it's the wireless path, not Geyser.**
+
+3. **Join from a *wired* Bedrock client (a Windows PC on Ethernet)** on the same
+   LAN. If wired works and wireless doesn't, that isolates the wireless segment.
+
+### If H1 is confirmed (wireless path)
+
+- Turn off **AP/client isolation** (a.k.a. "guest mode" / "client isolation")
+  on the router/mesh for the SSID the phone uses. This is the single most common
+  cause of "device on the same LAN can ping but can't hold a UDP session."
+- Put the phone and Mac on the **same mesh node / band** to avoid inter-node
+  UDP relay quirks; try 5 GHz vs 2.4 GHz.
+- Only *then* revisit MTU (see note below).
+
+### If H1 is ruled out (probe completes from the phone's network)
+
+- Suspect **H2**. Confirm the installed Geyser build lists protocol support for
+  the client's exact version (`1.26.20`), not just neighboring 26.x builds.
+- Test with a different Bedrock client version / platform (Windows) to see if
+  the failure is specific to the `1.26.20` iOS build.
+- Watch the upstream issues above for a fix; update Geyser when one lands.
+
+## MTU note — lowering may be the wrong lever here
+
+Geyser's common-issues guidance says to lower `advanced.bedrock.mtu` **in steps
+of ~100** for poor-network cases. We already tried:
+
+- Live server: `1200` -> `1000`
+- Clean test: `1200` -> `1000` -> `800`
+
+...with no change. Every RakNet packet *after* the padded `OpenConnectionRequest1`
+is small, and the server already receives that request ("tried to connect!"), so
+a too-large **handshake** packet is unlikely to be the blocker. Lowering MTU
+below the client's negotiated value can even *add* failures. Recommendation:
+let the `raknet-connect-test.py` probe report the real path MTU first, then set
+`mtu` to that value — don't keep guessing lower. If the probe shows a high MTU
+survives, reset `mtu` back toward the default `1400`.
+
+The clean-test server also has these diagnostic changes in place (harmless to
+keep, but not the fix): `bedrock.address: 0.0.0.0`,
+`advanced.bedrock.compression-level: -1`.
+
+## Latent issues to fix *after* the handshake works
+
+These do **not** cause the current RakNet stall, but they will block Bedrock
+players at the *next* phase once the handshake succeeds — fix them so you're not
+chasing a second bug:
+
+- **`enforce-secure-profile=true`** in both `minecraft-server/server.properties`
+  and `bedrock-clean-test-server/server.properties`. Bedrock/Floodgate players
+  have no Mojang-signed chat profile key; the recommended setting for a
+  Geyser+Floodgate server is `enforce-secure-profile=false`. Left as-is, a
+  Bedrock player that finally gets through RakNet can be kicked at Java login.
+- **`scripts/start-clean-server.sh` targets `minecraft-server-clean/`**, which is
+  gitignored and is **not** the `bedrock-clean-test-server/` directory whose
+  Geyser config we've been editing. Start the clean test server with the command
+  under "Useful Local Commands" below (which runs inside
+  `bedrock-clean-test-server`), or fix the script's `SERVER_DIR`. Otherwise
+  config edits won't be reflected in the running server.
+- `online-mode=true` with Floodgate installed **as a plugin on the same server**
+  is correct — leave it. Floodgate authenticates Bedrock players itself; this
+  only needs to change for proxy/standalone setups.
 
 ## Useful Local Commands
 
@@ -105,17 +294,27 @@ cd bedrock-clean-test-server
 ../runtime/jdk-21.0.10+7/Contents/Home/bin/java -Xms1G -Xmx2G -jar paper.jar --nogui
 ```
 
-Synthetic Bedrock ping:
+Synthetic Bedrock ping (proves the port is open + Geyser advertises):
 
 ```bash
 python3 scripts/bedrock-ping.py 192.168.4.59 19132
 python3 scripts/bedrock-ping.py 192.168.4.59 19133
 ```
 
+Staged RakNet handshake probe (proves *where* a real join stalls — run from the
+Mac AND from a device on the phone's Wi-Fi to split H1 vs H2):
+
+```bash
+python3 scripts/raknet-connect-test.py 192.168.4.59 19132
+python3 scripts/raknet-connect-test.py 192.168.4.59 19133
+```
+
 ## Files Worth Reviewing
 
 - `minecraft-server/plugins/Geyser-Spigot/config.yml`
 - `bedrock-clean-test-server/plugins/Geyser-Spigot/config.yml`
+- `minecraft-server/server.properties` / `bedrock-clean-test-server/server.properties` (see `enforce-secure-profile`)
+- `scripts/raknet-connect-test.py` (staged handshake diagnostic)
 - `scripts/start-server.sh`
-- `scripts/start-clean-server.sh`
+- `scripts/start-clean-server.sh` (note: targets `minecraft-server-clean/`, not `bedrock-clean-test-server/`)
 - `README.md`
