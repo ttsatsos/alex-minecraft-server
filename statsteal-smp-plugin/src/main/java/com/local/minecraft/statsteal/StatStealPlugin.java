@@ -124,45 +124,48 @@ public final class StatStealPlugin extends JavaPlugin implements Listener {
             return;
         }
 
-        handleDeathPenalty(victim, null);
+        if (!requirePlayerKill) {
+            handleDeathPenalty(victim, null);
+        }
     }
 
     private void handlePlayerKill(Player killer, Player victim) {
-        List<ConfiguredStat> transferable = new ArrayList<>();
+        List<ConfiguredStat> enabledStats = new ArrayList<>();
         for (ConfiguredStat config : configuredStats.values()) {
-            if (!config.enabled()) {
-                continue;
+            if (config.enabled()) {
+                enabledStats.add(config);
             }
-            if (getLevel(killer, config.stat()) >= MAX_LEVEL) {
-                continue;
-            }
-            if (getLevel(victim, config.stat()) <= MIN_LEVEL) {
-                continue;
-            }
-            transferable.add(config);
         }
 
-        if (transferable.isEmpty()) {
-            killer.sendMessage(Component.text(messagePrefix + "You are maxed out on every stat and gained nothing from " + victim.getName() + ".", NamedTextColor.YELLOW));
+        if (enabledStats.isEmpty()) {
             return;
         }
 
-        ConfiguredStat chosen = transferable.get(ThreadLocalRandom.current().nextInt(transferable.size()));
-        updateLevel(killer, chosen.stat(), 1);
+        ConfiguredStat chosen = enabledStats.get(ThreadLocalRandom.current().nextInt(enabledStats.size()));
+        boolean killerGained = getLevel(killer, chosen.stat()) < MAX_LEVEL;
+        if (killerGained) {
+            updateLevel(killer, chosen.stat(), 1);
+        }
         updateLevel(victim, chosen.stat(), -1);
         applyStats(killer, true);
         applyStats(victim, false);
         saveStore();
 
-        killer.sendMessage(Component.text(messagePrefix + "You gained 1 " + chosen.displayName() + " stack ("
-                + formatPercent(chosen.stat()) + ", level " + getLevel(killer, chosen.stat()) + "/" + MAX_LEVEL
-                + ") from killing " + victim.getName() + ".", NamedTextColor.GREEN));
+        if (killerGained) {
+            killer.sendMessage(Component.text(messagePrefix + "You gained 1 " + chosen.displayName() + " stack ("
+                    + formatPercent(chosen.stat()) + ", level " + getLevel(killer, chosen.stat()) + "/" + MAX_LEVEL
+                    + ") from killing " + victim.getName() + ".", NamedTextColor.GREEN));
+        } else {
+            killer.sendMessage(Component.text(messagePrefix + "The roll selected " + chosen.displayName()
+                    + ", but you are already at the +" + MAX_LEVEL + " maximum.", NamedTextColor.YELLOW));
+        }
         victim.sendMessage(Component.text(messagePrefix + "You lost 1 " + chosen.displayName() + " stack to " + killer.getName() + ".", NamedTextColor.RED));
         if (announceToServer) {
-            Bukkit.broadcast(Component.text(messagePrefix + killer.getName() + " stole 1 " + chosen.displayName()
-                    + " stack from " + victim.getName() + ".", NamedTextColor.GOLD));
+            String action = killerGained ? " stole 1 " : " rolled a maxed ";
+            Bukkit.broadcast(Component.text(messagePrefix + killer.getName() + action + chosen.displayName()
+                    + " stack; " + victim.getName() + " lost 1.", NamedTextColor.GOLD));
         }
-        maybeBanIfBottomedOut(victim);
+        maybeBanIfCategoryBottomedOut(victim);
     }
 
     private void handleDeathPenalty(Player victim, Player killer) {
@@ -186,25 +189,30 @@ public final class StatStealPlugin extends JavaPlugin implements Listener {
 
         String source = killer == null ? "death" : killer.getName();
         victim.sendMessage(Component.text(messagePrefix + "You lost 1 " + chosen.displayName() + " stack to " + source + ".", NamedTextColor.RED));
-        maybeBanIfBottomedOut(victim);
+        maybeBanIfCategoryBottomedOut(victim);
     }
 
-    private void maybeBanIfBottomedOut(Player player) {
+    private void maybeBanIfCategoryBottomedOut(Player player) {
         for (ConfiguredStat config : configuredStats.values()) {
             if (!config.enabled()) {
                 continue;
             }
-            if (getLevel(player, config.stat()) > MIN_LEVEL) {
+            if (getLevel(player, config.stat()) <= MIN_LEVEL) {
+                banForBottomedOutCategory(player, config);
                 return;
             }
         }
+    }
+
+    private void banForBottomedOutCategory(Player player, ConfiguredStat config) {
         Date expires = Date.from(Instant.now().plus(Duration.ofDays(30)));
+        String reason = "You reached " + MIN_LEVEL + " in " + config.displayName() + ".";
         Bukkit.getBanList(BanList.Type.NAME).addBan(
                 player.getName(),
-                "You reached -5 in every StatSteal attribute.",
+                reason,
                 expires,
                 "StatStealSmp");
-        player.kick(Component.text("You reached -5 in every StatSteal attribute and are banned for 30 days.", NamedTextColor.RED));
+        player.kick(Component.text(reason + " You are banned for 30 days.", NamedTextColor.RED));
     }
 
     private int getLevel(Player player, StealableStat stat) {
