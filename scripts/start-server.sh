@@ -1,10 +1,14 @@
 #!/bin/zsh
 set -euo pipefail
 
-ROOT="/Users/alextsatsos1/Documents/Codex/2026-04-26/help-us-set-up-a-minecraft"
-SERVER_DIR="$ROOT/minecraft-server"
+SCRIPT_DIR="${0:A:h}"
+ROOT="${SCRIPT_DIR:h}"
+SERVER_DIR="${MINECRAFT_SERVER_DIR:-$ROOT/minecraft-server}"
 JAR_PATH="$SERVER_DIR/paper.jar"
-LOCAL_JAVA="$ROOT/runtime/jdk-21.0.10+7/Contents/Home/bin/java"
+LATEST_RUNTIME_DIR="$(find "$ROOT/runtime" -maxdepth 1 -type d -name 'jdk-*' 2>/dev/null | sort -V | tail -n 1)"
+LOCAL_JAVA="${LATEST_RUNTIME_DIR:+$LATEST_RUNTIME_DIR/Contents/Home/bin/java}"
+MC_XMS="${MC_XMS:-2G}"
+MC_XMX="${MC_XMX:-6G}"
 
 JAVA_BIN="${JAVA_HOME:-}"
 if [ -n "$JAVA_BIN" ] && [ -x "$JAVA_BIN/bin/java" ]; then
@@ -17,7 +21,7 @@ fi
 
 if [ -z "$JAVA_BIN" ] || [ ! -x "$JAVA_BIN" ]; then
   echo "Java is not installed or not in PATH."
-  echo "Expected bundled Java at $LOCAL_JAVA"
+  echo "Expected a bundled Java runtime under $ROOT/runtime/jdk-*"
   exit 1
 fi
 
@@ -34,4 +38,4 @@ fi
 
 cd "$SERVER_DIR"
 
-exec "$JAVA_BIN" -Xms4G -Xmx8G -jar "$JAR_PATH" --nogui
+exec "$JAVA_BIN" -Xms"$MC_XMS" -Xmx"$MC_XMX" -jar "$JAR_PATH" --nogui
