@@ -23,15 +23,15 @@ stats:
     display-name: "Max Health"
   attack-damage:
     enabled: true
-    steal-amount: 0.25
+    steal-amount: 1.0
     min-value: 0.0
-    max-value: 2.25
+    max-value: 6.0
     display-name: "Attack Damage"
   movement-speed:
     enabled: true
-    steal-amount: 0.025
-    min-value: 0.0
-    max-value: 0.225
+    steal-amount: 0.01
+    min-value: 0.05
+    max-value: 0.15
     display-name: "Movement Speed"
   attack-speed:
     enabled: false
@@ -41,9 +41,9 @@ stats:
     display-name: "Attack Speed"
   armor:
     enabled: true
-    steal-amount: 5.0
-    min-value: -25.0
-    max-value: 25.0
+    steal-amount: 1.0
+    min-value: -5.0
+    max-value: 5.0
     display-name: "Armor"
   luck:
     enabled: false

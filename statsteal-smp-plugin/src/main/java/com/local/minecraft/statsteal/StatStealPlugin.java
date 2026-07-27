@@ -469,7 +469,9 @@ public final class StatStealPlugin extends JavaPlugin implements Listener {
     private static String formatChange(StealableStat stat) {
         return switch (stat) {
             case MAX_HEALTH -> "1 heart";
-            case ATTACK_DAMAGE, MOVEMENT_SPEED, ARMOR -> "25%";
+            case ATTACK_DAMAGE -> "1 damage point";
+            case MOVEMENT_SPEED -> "10% speed";
+            case ARMOR -> "1 armor point";
             case ATTACK_SPEED, LUCK -> trimDouble(0);
         };
     }
