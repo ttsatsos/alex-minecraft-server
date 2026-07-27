@@ -8,6 +8,12 @@ steal:
   excluded-player-name-prefixes:
     - "Bot"
 
+notifications:
+  title:
+    fade-in-millis: 300
+    stay-seconds: 8
+    fade-out-millis: 700
+
 stats:
   max-health:
     enabled: true

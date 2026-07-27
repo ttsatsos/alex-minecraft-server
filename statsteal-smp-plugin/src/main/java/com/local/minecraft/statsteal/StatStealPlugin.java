@@ -41,6 +41,7 @@ public final class StatStealPlugin extends JavaPlugin implements Listener {
     private boolean announceToServer;
     private boolean restoreHealthOnSteal;
     private String messagePrefix;
+    private Title.Times notificationTitleTimes;
     private final Set<String> excludedPlayerNames = new HashSet<>();
     private final Set<String> excludedPlayerPrefixes = new HashSet<>();
 
@@ -63,6 +64,10 @@ public final class StatStealPlugin extends JavaPlugin implements Listener {
         announceToServer = getConfig().getBoolean("steal.announce-to-server", true);
         restoreHealthOnSteal = getConfig().getBoolean("steal.restore-health-on-steal", true);
         messagePrefix = colorize(getConfig().getString("steal.message-prefix", "&6[StatSteal]&r "));
+        notificationTitleTimes = Title.Times.times(
+                Duration.ofMillis(Math.max(0, getConfig().getLong("notifications.title.fade-in-millis", 300))),
+                Duration.ofSeconds(Math.max(1, getConfig().getLong("notifications.title.stay-seconds", 8))),
+                Duration.ofMillis(Math.max(0, getConfig().getLong("notifications.title.fade-out-millis", 700))));
         excludedPlayerNames.clear();
         excludedPlayerPrefixes.clear();
         for (String name : getConfig().getStringList("steal.excluded-player-names")) {
@@ -162,9 +167,11 @@ public final class StatStealPlugin extends JavaPlugin implements Listener {
             killer.sendMessage(Component.text(messagePrefix + "You gained 1 " + chosen.displayName() + " stack ("
                     + formatPercent(chosen.stat()) + ", level " + getLevel(killer, chosen.stat()) + "/" + MAX_LEVEL
                     + ") from killing " + victim.getName() + ".", NamedTextColor.GREEN));
+            showStatTitle(killer, "STAT GAINED", chosen.displayName(), getLevel(killer, chosen.stat()), NamedTextColor.GREEN);
         } else {
             killer.sendMessage(Component.text(messagePrefix + "The roll selected " + chosen.displayName()
                     + ", but you are already at the +" + MAX_LEVEL + " maximum.", NamedTextColor.YELLOW));
+            showStatTitle(killer, "STAT MAXED", chosen.displayName(), MAX_LEVEL, NamedTextColor.YELLOW);
         }
         victim.sendMessage(Component.text(messagePrefix + "You lost 1 " + chosen.displayName() + " stack to " + killer.getName() + ".", NamedTextColor.RED));
         if (announceToServer) {
@@ -211,8 +218,9 @@ public final class StatStealPlugin extends JavaPlugin implements Listener {
         String latestName = getStatDisplayName(latest.statKey());
         player.showTitle(Title.title(
                 Component.text("STAT LOST", NamedTextColor.RED),
-                Component.text(latestName + ": " + latest.newLevel() + " (all stats at " + MIN_LEVEL + " = ban)", NamedTextColor.YELLOW),
-                Title.Times.times(Duration.ofMillis(300), Duration.ofSeconds(4), Duration.ofMillis(700))));
+                Component.text(latestName + ": " + formatSignedLevel(latest.newLevel())
+                        + " (all stats at " + MIN_LEVEL + " = ban)", NamedTextColor.YELLOW),
+                notificationTitleTimes));
         player.sendMessage(Component.text(messagePrefix + "Stat changes from your last death:", NamedTextColor.GOLD));
         for (PendingStatLoss loss : losses) {
             String displayName = getStatDisplayName(loss.statKey());
@@ -220,6 +228,18 @@ public final class StatStealPlugin extends JavaPlugin implements Listener {
                     + ". Current level: " + loss.newLevel() + " (ban only when all stats reach " + MIN_LEVEL + ").", NamedTextColor.RED));
         }
         saveStore();
+    }
+
+    private void showStatTitle(
+            Player player,
+            String heading,
+            String statName,
+            int level,
+            NamedTextColor headingColor) {
+        player.showTitle(Title.title(
+                Component.text(heading, headingColor),
+                Component.text(statName + " is now " + formatSignedLevel(level), NamedTextColor.YELLOW),
+                notificationTitleTimes));
     }
 
     private String getStatDisplayName(String statKey) {
@@ -436,6 +456,10 @@ public final class StatStealPlugin extends JavaPlugin implements Listener {
             return Long.toString((long) value);
         }
         return String.format(Locale.US, "%.2f", value);
+    }
+
+    private static String formatSignedLevel(int level) {
+        return level > 0 ? "+" + level : Integer.toString(level);
     }
 
     private static String colorize(String input) {
