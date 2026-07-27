@@ -172,7 +172,7 @@ public final class StatStealPlugin extends JavaPlugin implements Listener {
             Bukkit.broadcast(Component.text(messagePrefix + killer.getName() + action + chosen.displayName()
                     + " stack; " + victim.getName() + " lost 1.", NamedTextColor.GOLD));
         }
-        maybeBanIfCategoryBottomedOut(victim);
+        maybeBanIfAllCategoriesBottomedOut(victim);
     }
 
     private void handleDeathPenalty(Player victim, Player killer) {
@@ -198,7 +198,7 @@ public final class StatStealPlugin extends JavaPlugin implements Listener {
         saveStore();
 
         victim.sendMessage(Component.text(messagePrefix + "You lost 1 " + chosen.displayName() + " stack to " + source + ".", NamedTextColor.RED));
-        maybeBanIfCategoryBottomedOut(victim);
+        maybeBanIfAllCategoriesBottomedOut(victim);
     }
 
     private void showPendingLosses(Player player) {
@@ -211,13 +211,13 @@ public final class StatStealPlugin extends JavaPlugin implements Listener {
         String latestName = getStatDisplayName(latest.statKey());
         player.showTitle(Title.title(
                 Component.text("STAT LOST", NamedTextColor.RED),
-                Component.text(latestName + ": " + latest.newLevel() + " (ban at " + MIN_LEVEL + ")", NamedTextColor.YELLOW),
+                Component.text(latestName + ": " + latest.newLevel() + " (all stats at " + MIN_LEVEL + " = ban)", NamedTextColor.YELLOW),
                 Title.Times.times(Duration.ofMillis(300), Duration.ofSeconds(4), Duration.ofMillis(700))));
         player.sendMessage(Component.text(messagePrefix + "Stat changes from your last death:", NamedTextColor.GOLD));
         for (PendingStatLoss loss : losses) {
             String displayName = getStatDisplayName(loss.statKey());
             player.sendMessage(Component.text("- Lost 1 " + displayName + " to " + loss.source()
-                    + ". Current level: " + loss.newLevel() + " (ban at " + MIN_LEVEL + ").", NamedTextColor.RED));
+                    + ". Current level: " + loss.newLevel() + " (ban only when all stats reach " + MIN_LEVEL + ").", NamedTextColor.RED));
         }
         saveStore();
     }
@@ -230,21 +230,25 @@ public final class StatStealPlugin extends JavaPlugin implements Listener {
                 .orElse(statKey);
     }
 
-    private void maybeBanIfCategoryBottomedOut(Player player) {
+    private void maybeBanIfAllCategoriesBottomedOut(Player player) {
+        boolean hasEnabledStat = false;
         for (ConfiguredStat config : configuredStats.values()) {
             if (!config.enabled()) {
                 continue;
             }
-            if (getLevel(player, config.stat()) <= MIN_LEVEL) {
-                banForBottomedOutCategory(player, config);
+            hasEnabledStat = true;
+            if (getLevel(player, config.stat()) > MIN_LEVEL) {
                 return;
             }
         }
+        if (hasEnabledStat) {
+            banForAllStatsBottomedOut(player);
+        }
     }
 
-    private void banForBottomedOutCategory(Player player, ConfiguredStat config) {
+    private void banForAllStatsBottomedOut(Player player) {
         Date expires = Date.from(Instant.now().plus(Duration.ofDays(30)));
-        String reason = "You reached " + MIN_LEVEL + " in " + config.displayName() + ".";
+        String reason = "You reached " + MIN_LEVEL + " in every StatSteal category.";
         Bukkit.getBanList(BanList.Type.NAME).addBan(
                 player.getName(),
                 reason,
