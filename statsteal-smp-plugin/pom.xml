@@ -5,7 +5,7 @@
 
     <groupId>com.local.minecraft</groupId>
     <artifactId>statsteal-smp-plugin</artifactId>
-    <version>0.2.0</version>
+    <version>0.3.0</version>
     <packaging>jar</packaging>
 
     <properties>
@@ -27,6 +27,12 @@
             <artifactId>paper-api</artifactId>
             <version>1.21.8-R0.1-SNAPSHOT</version>
             <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>5.13.4</version>
+            <scope>test</scope>
         </dependency>
     </dependencies>
 

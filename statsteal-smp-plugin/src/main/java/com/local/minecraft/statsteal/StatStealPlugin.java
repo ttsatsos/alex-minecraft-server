@@ -17,6 +17,7 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.logging.Level;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.title.Title;
 import org.bukkit.Bukkit;
 import org.bukkit.BanList;
 import org.bukkit.attribute.AttributeInstance;
@@ -90,12 +91,16 @@ public final class StatStealPlugin extends JavaPlugin implements Listener {
     @EventHandler
     public void onPlayerJoin(PlayerJoinEvent event) {
         applyStats(event.getPlayer(), true);
+        Bukkit.getScheduler().runTaskLater(this, () -> showPendingLosses(event.getPlayer()), 20L);
     }
 
     @EventHandler
     public void onPlayerRespawn(PlayerRespawnEvent event) {
         processedDeathTicks.remove(event.getPlayer().getUniqueId());
-        Bukkit.getScheduler().runTask(this, () -> applyStats(event.getPlayer(), true));
+        Bukkit.getScheduler().runTask(this, () -> {
+            applyStats(event.getPlayer(), true);
+            showPendingLosses(event.getPlayer());
+        });
     }
 
     @EventHandler
@@ -147,6 +152,8 @@ public final class StatStealPlugin extends JavaPlugin implements Listener {
             updateLevel(killer, chosen.stat(), 1);
         }
         updateLevel(victim, chosen.stat(), -1);
+        store.addPendingLoss(victim.getUniqueId(), new PendingStatLoss(
+                chosen.stat().configKey(), getLevel(victim, chosen.stat()), killer.getName()));
         applyStats(killer, true);
         applyStats(victim, false);
         saveStore();
@@ -184,12 +191,43 @@ public final class StatStealPlugin extends JavaPlugin implements Listener {
 
         ConfiguredStat chosen = eligible.get(ThreadLocalRandom.current().nextInt(eligible.size()));
         updateLevel(victim, chosen.stat(), -1);
+        String source = killer == null ? "death" : killer.getName();
+        store.addPendingLoss(victim.getUniqueId(), new PendingStatLoss(
+                chosen.stat().configKey(), getLevel(victim, chosen.stat()), source));
         applyStats(victim, false);
         saveStore();
 
-        String source = killer == null ? "death" : killer.getName();
         victim.sendMessage(Component.text(messagePrefix + "You lost 1 " + chosen.displayName() + " stack to " + source + ".", NamedTextColor.RED));
         maybeBanIfCategoryBottomedOut(victim);
+    }
+
+    private void showPendingLosses(Player player) {
+        List<PendingStatLoss> losses = store.drainPendingLosses(player.getUniqueId());
+        if (losses.isEmpty()) {
+            return;
+        }
+
+        PendingStatLoss latest = losses.get(losses.size() - 1);
+        String latestName = getStatDisplayName(latest.statKey());
+        player.showTitle(Title.title(
+                Component.text("STAT LOST", NamedTextColor.RED),
+                Component.text(latestName + ": " + latest.newLevel() + " (ban at " + MIN_LEVEL + ")", NamedTextColor.YELLOW),
+                Title.Times.times(Duration.ofMillis(300), Duration.ofSeconds(4), Duration.ofMillis(700))));
+        player.sendMessage(Component.text(messagePrefix + "Stat changes from your last death:", NamedTextColor.GOLD));
+        for (PendingStatLoss loss : losses) {
+            String displayName = getStatDisplayName(loss.statKey());
+            player.sendMessage(Component.text("- Lost 1 " + displayName + " to " + loss.source()
+                    + ". Current level: " + loss.newLevel() + " (ban at " + MIN_LEVEL + ").", NamedTextColor.RED));
+        }
+        saveStore();
+    }
+
+    private String getStatDisplayName(String statKey) {
+        return StealableStat.fromConfigKey(statKey)
+                .map(configuredStats::get)
+                .filter(Objects::nonNull)
+                .map(ConfiguredStat::displayName)
+                .orElse(statKey);
     }
 
     private void maybeBanIfCategoryBottomedOut(Player player) {
