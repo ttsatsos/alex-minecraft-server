@@ -8,6 +8,7 @@ LATEST_RUNTIME_DIR="$(find "$ROOT/runtime" -maxdepth 1 -type d -name 'jdk-*' 2>/
 LOCAL_JAVA="${LATEST_RUNTIME_DIR:+$LATEST_RUNTIME_DIR/Contents/Home/bin/java}"
 JAVA_PORT="${JAVA_PORT:-25565}"
 BEDROCK_PORT="${BEDROCK_PORT:-19132}"
+VOICE_PORT="${VOICE_PORT:-24454}"
 
 echo "Checking expected server files..."
 
@@ -40,7 +41,8 @@ for path in \
   "$SERVER_DIR/plugins/Geyser-Spigot.jar" \
   "$SERVER_DIR/plugins/Floodgate-Spigot.jar" \
   "$SERVER_DIR/plugins/ViaVersion.jar" \
-  "$SERVER_DIR/plugins/SkinsRestorer.jar"
+  "$SERVER_DIR/plugins/SkinsRestorer.jar" \
+  "$SERVER_DIR/plugins/SimpleVoiceChat.jar"
 do
   if [ -e "$path" ]; then
     echo "[ok] $path"
@@ -53,3 +55,4 @@ echo
 echo "Expected network ports:"
 echo "- Java: $JAVA_PORT/TCP"
 echo "- Bedrock: $BEDROCK_PORT/UDP"
+echo "- Java voice chat: $VOICE_PORT/UDP"
