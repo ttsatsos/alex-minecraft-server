@@ -15,6 +15,8 @@ MAVEN_URL="https://downloads.apache.org/maven/maven-3/$MAVEN_VERSION/binaries/ap
 GEYSER_URL="https://download.geysermc.org/v2/projects/geyser/versions/latest/builds/latest/downloads/spigot"
 FLOODGATE_URL="https://download.geysermc.org/v2/projects/floodgate/versions/latest/builds/latest/downloads/spigot"
 VIAVERSION_URL="https://ci.viaversion.com/job/ViaVersion/1430/artifact/build/libs/ViaVersion-5.11.1-SNAPSHOT.jar"
+SKINSRESTORER_URL="https://cdn.modrinth.com/data/TsLS8Py5/versions/wXS6bHiC/SkinsRestorer.jar"
+SKINSRESTORER_SHA512="7819f6b1e8f8ddb2e86d3d3e54352dd040f381e9a094f8a9c80c7d3273ffd7b1cef6eca7369dcee4b0f5290e7837ef51cee1baeca906b3784f30d7ba2f58b7b4"
 
 download() {
   local url="$1"
@@ -50,6 +52,8 @@ echo "$PAPER_SHA256  $SERVER_DIR/paper.jar" | shasum -a 256 -c -
 download "$GEYSER_URL" "$SERVER_DIR/plugins/Geyser-Spigot.jar"
 download "$FLOODGATE_URL" "$SERVER_DIR/plugins/Floodgate-Spigot.jar"
 download "$VIAVERSION_URL" "$SERVER_DIR/plugins/ViaVersion.jar"
+download "$SKINSRESTORER_URL" "$SERVER_DIR/plugins/SkinsRestorer.jar"
+echo "$SKINSRESTORER_SHA512  $SERVER_DIR/plugins/SkinsRestorer.jar" | shasum -a 512 -c -
 
 JAVA_HOME="$(find "$RUNTIME_DIR" -maxdepth 1 -type d -name 'jdk-*' | sort -V | tail -n 1)/Contents/Home"
 MAVEN_BIN="$TOOLS_DIR/apache-maven-$MAVEN_VERSION/bin/mvn"

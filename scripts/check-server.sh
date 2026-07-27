@@ -39,7 +39,8 @@ echo "Cross-play plugin checks:"
 for path in \
   "$SERVER_DIR/plugins/Geyser-Spigot.jar" \
   "$SERVER_DIR/plugins/Floodgate-Spigot.jar" \
-  "$SERVER_DIR/plugins/ViaVersion.jar"
+  "$SERVER_DIR/plugins/ViaVersion.jar" \
+  "$SERVER_DIR/plugins/SkinsRestorer.jar"
 do
   if [ -e "$path" ]; then
     echo "[ok] $path"

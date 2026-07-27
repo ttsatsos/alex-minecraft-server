@@ -36,3 +36,16 @@ At the Minecraft console, run `stop` before changing plugins or copying worlds.
 - Bedrock Edition over Tailscale: `100.79.13.24`, port `19132`
 
 The Tailscale app must be active on both the client and the mini.
+
+## Cape compatibility test
+
+SkinsRestorer is installed server-side for Java/Floodgate cape testing. Its
+standard cape support copies a Mojang-signed player profile, which changes both
+the skin and cape. From the game, temporarily apply a known profile with:
+
+```text
+/skin set Dinnerbone
+```
+
+Use `/skin clear` to restore the player's normal account skin. Confirm the test
+from both a Java client and a Bedrock client before relying on cape visibility.
