@@ -165,7 +165,7 @@ public final class StatStealPlugin extends JavaPlugin implements Listener {
 
         if (killerGained) {
             killer.sendMessage(Component.text(messagePrefix + "You gained 1 " + chosen.displayName() + " stack ("
-                    + formatPercent(chosen.stat()) + ", level " + getLevel(killer, chosen.stat()) + "/" + MAX_LEVEL
+                    + formatChange(chosen.stat()) + ", level " + getLevel(killer, chosen.stat()) + "/" + MAX_LEVEL
                     + ") from killing " + victim.getName() + ".", NamedTextColor.GREEN));
             showStatTitle(killer, "STAT GAINED", chosen.displayName(), getLevel(killer, chosen.stat()), NamedTextColor.GREEN);
         } else {
@@ -466,9 +466,10 @@ public final class StatStealPlugin extends JavaPlugin implements Listener {
         return Objects.requireNonNullElse(input, "").replace("&6", "").replace("&r", "");
     }
 
-    private static String formatPercent(StealableStat stat) {
+    private static String formatChange(StealableStat stat) {
         return switch (stat) {
-            case MAX_HEALTH, ATTACK_DAMAGE, MOVEMENT_SPEED, ARMOR -> "25%";
+            case MAX_HEALTH -> "1 heart";
+            case ATTACK_DAMAGE, MOVEMENT_SPEED, ARMOR -> "25%";
             case ATTACK_SPEED, LUCK -> trimDouble(0);
         };
     }

@@ -17,9 +17,9 @@ notifications:
 stats:
   max-health:
     enabled: true
-    steal-amount: 5.0
-    min-value: 5.0
-    max-value: 45.0
+    steal-amount: 2.0
+    min-value: 10.0
+    max-value: 30.0
     display-name: "Max Health"
   attack-damage:
     enabled: true
