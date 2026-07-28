@@ -1,5 +1,5 @@
 name: StatStealSmp
-version: 0.6.0
+version: 0.7.0
 main: com.local.minecraft.statsteal.StatStealPlugin
 api-version: '1.21'
 commands:

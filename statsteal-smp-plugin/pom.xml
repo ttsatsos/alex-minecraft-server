@@ -5,7 +5,7 @@
 
     <groupId>com.local.minecraft</groupId>
     <artifactId>statsteal-smp-plugin</artifactId>
-    <version>0.6.0</version>
+    <version>0.7.0</version>
     <packaging>jar</packaging>
 
     <properties>

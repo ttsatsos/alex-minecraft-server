@@ -20,13 +20,19 @@ import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.title.Title;
 import org.bukkit.Bukkit;
 import org.bukkit.BanList;
+import org.bukkit.Material;
 import org.bukkit.attribute.AttributeInstance;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
+import org.bukkit.event.block.Action;
+import org.bukkit.event.block.BlockDispenseEvent;
+import org.bukkit.event.block.BlockPlaceEvent;
+import org.bukkit.event.entity.EntityPlaceEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
+import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerRespawnEvent;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -36,11 +42,14 @@ public final class StatStealPlugin extends JavaPlugin implements Listener {
     private static final int MAX_LEVEL = 5;
     private final Map<StealableStat, ConfiguredStat> configuredStats = new EnumMap<>(StealableStat.class);
     private final Map<java.util.UUID, Integer> processedDeathTicks = new HashMap<>();
+    private final Map<java.util.UUID, Integer> restrictionMessageTicks = new HashMap<>();
     private PlayerStatStore store;
     private boolean requirePlayerKill;
     private boolean announceToServer;
     private boolean restoreHealthOnSteal;
     private boolean showRulesOnJoin;
+    private boolean disableEndCrystals;
+    private boolean disableRespawnAnchors;
     private long rulesJoinDelayTicks;
     private String messagePrefix;
     private List<String> serverRules = List.of();
@@ -69,6 +78,8 @@ public final class StatStealPlugin extends JavaPlugin implements Listener {
         announceToServer = getConfig().getBoolean("steal.announce-to-server", true);
         restoreHealthOnSteal = getConfig().getBoolean("steal.restore-health-on-steal", true);
         showRulesOnJoin = getConfig().getBoolean("rules.show-on-join", true);
+        disableEndCrystals = getConfig().getBoolean("restrictions.disable-end-crystals", true);
+        disableRespawnAnchors = getConfig().getBoolean("restrictions.disable-respawn-anchors", true);
         rulesJoinDelayTicks = Math.max(0L, getConfig().getLong("rules.join-delay-ticks", 40L));
         serverRules = List.copyOf(getConfig().getStringList("rules.lines"));
         messagePrefix = colorize(getConfig().getString("steal.message-prefix", "&6[StatSteal]&r "));
@@ -107,6 +118,58 @@ public final class StatStealPlugin extends JavaPlugin implements Listener {
         Bukkit.getScheduler().runTaskLater(this, () -> showPendingLosses(event.getPlayer()), 20L);
         if (showRulesOnJoin) {
             Bukkit.getScheduler().runTaskLater(this, () -> showRules(event.getPlayer()), rulesJoinDelayTicks);
+        }
+    }
+
+    @EventHandler(ignoreCancelled = true)
+    public void onRestrictedBlockPlace(BlockPlaceEvent event) {
+        if (disableRespawnAnchors && event.getBlockPlaced().getType() == Material.RESPAWN_ANCHOR) {
+            event.setCancelled(true);
+            showRestrictionMessage(event.getPlayer(), "Respawn Anchors are disabled on this server.");
+        }
+    }
+
+    @EventHandler(ignoreCancelled = true)
+    public void onRestrictedEntityPlace(EntityPlaceEvent event) {
+        if (disableEndCrystals && event.getEntity().getType().name().equals("END_CRYSTAL")) {
+            event.setCancelled(true);
+            if (event.getPlayer() != null) {
+                showRestrictionMessage(event.getPlayer(), "End Crystals are disabled on this server.");
+            }
+        }
+    }
+
+    @EventHandler(ignoreCancelled = true)
+    public void onRestrictedInteraction(PlayerInteractEvent event) {
+        if (event.getAction() != Action.RIGHT_CLICK_BLOCK) {
+            return;
+        }
+        if (disableEndCrystals && event.getItem() != null && event.getItem().getType() == Material.END_CRYSTAL) {
+            event.setCancelled(true);
+            showRestrictionMessage(event.getPlayer(), "End Crystals are disabled on this server.");
+            return;
+        }
+        if (disableRespawnAnchors && event.getClickedBlock() != null
+                && event.getClickedBlock().getType() == Material.RESPAWN_ANCHOR) {
+            event.setCancelled(true);
+            showRestrictionMessage(event.getPlayer(), "Respawn Anchors are disabled on this server.");
+        }
+    }
+
+    @EventHandler(ignoreCancelled = true)
+    public void onRestrictedDispense(BlockDispenseEvent event) {
+        Material type = event.getItem().getType();
+        if ((disableEndCrystals && type == Material.END_CRYSTAL)
+                || (disableRespawnAnchors && type == Material.RESPAWN_ANCHOR)) {
+            event.setCancelled(true);
+        }
+    }
+
+    private void showRestrictionMessage(Player player, String message) {
+        int currentTick = Bukkit.getCurrentTick();
+        Integer previousTick = restrictionMessageTicks.put(player.getUniqueId(), currentTick);
+        if (previousTick == null || currentTick - previousTick >= 40) {
+            player.sendActionBar(Component.text(message, NamedTextColor.RED));
         }
     }
 

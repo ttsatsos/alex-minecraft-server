@@ -25,6 +25,10 @@ rules:
     - "Strength II and Speed II effects may last no longer than 20 seconds."
     - "No auto-clickers."
 
+restrictions:
+  disable-end-crystals: true
+  disable-respawn-anchors: true
+
 stats:
   max-health:
     enabled: true
