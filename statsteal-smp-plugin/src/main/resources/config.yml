@@ -14,6 +14,17 @@ notifications:
     stay-seconds: 8
     fade-out-millis: 700
 
+rules:
+  show-on-join: true
+  join-delay-ticks: 40
+  lines:
+    - "No End Crystals or Respawn Anchors."
+    - "No command blocks."
+    - "No X-ray mods or resource packs."
+    - "No cheats."
+    - "Strength II and Speed II effects may last no longer than 20 seconds."
+    - "No auto-clickers."
+
 stats:
   max-health:
     enabled: true

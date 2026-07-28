@@ -40,7 +40,10 @@ public final class StatStealPlugin extends JavaPlugin implements Listener {
     private boolean requirePlayerKill;
     private boolean announceToServer;
     private boolean restoreHealthOnSteal;
+    private boolean showRulesOnJoin;
+    private long rulesJoinDelayTicks;
     private String messagePrefix;
+    private List<String> serverRules = List.of();
     private Title.Times notificationTitleTimes;
     private final Set<String> excludedPlayerNames = new HashSet<>();
     private final Set<String> excludedPlayerPrefixes = new HashSet<>();
@@ -48,6 +51,8 @@ public final class StatStealPlugin extends JavaPlugin implements Listener {
     @Override
     public void onEnable() {
         saveDefaultConfig();
+        getConfig().options().copyDefaults(true);
+        saveConfig();
         store = new PlayerStatStore(new java.io.File(getDataFolder(), "player-stats.yml"));
         reloadPluginState();
         Bukkit.getPluginManager().registerEvents(this, this);
@@ -63,6 +68,9 @@ public final class StatStealPlugin extends JavaPlugin implements Listener {
         requirePlayerKill = getConfig().getBoolean("steal.require-player-kill", true);
         announceToServer = getConfig().getBoolean("steal.announce-to-server", true);
         restoreHealthOnSteal = getConfig().getBoolean("steal.restore-health-on-steal", true);
+        showRulesOnJoin = getConfig().getBoolean("rules.show-on-join", true);
+        rulesJoinDelayTicks = Math.max(0L, getConfig().getLong("rules.join-delay-ticks", 40L));
+        serverRules = List.copyOf(getConfig().getStringList("rules.lines"));
         messagePrefix = colorize(getConfig().getString("steal.message-prefix", "&6[StatSteal]&r "));
         notificationTitleTimes = Title.Times.times(
                 Duration.ofMillis(Math.max(0, getConfig().getLong("notifications.title.fade-in-millis", 300))),
@@ -97,6 +105,9 @@ public final class StatStealPlugin extends JavaPlugin implements Listener {
     public void onPlayerJoin(PlayerJoinEvent event) {
         applyStats(event.getPlayer(), true);
         Bukkit.getScheduler().runTaskLater(this, () -> showPendingLosses(event.getPlayer()), 20L);
+        if (showRulesOnJoin) {
+            Bukkit.getScheduler().runTaskLater(this, () -> showRules(event.getPlayer()), rulesJoinDelayTicks);
+        }
     }
 
     @EventHandler
@@ -322,6 +333,11 @@ public final class StatStealPlugin extends JavaPlugin implements Listener {
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
+        if (command.getName().equalsIgnoreCase("rules")) {
+            showRules(sender);
+            return true;
+        }
+
         if (args.length == 0 || args[0].equalsIgnoreCase("stats")) {
             if (!(sender instanceof Player player)) {
                 sender.sendMessage("Run /statsteal stats <player> from console.");
@@ -381,6 +397,14 @@ public final class StatStealPlugin extends JavaPlugin implements Listener {
                 return true;
             }
         }
+    }
+
+    private void showRules(CommandSender sender) {
+        sender.sendMessage(Component.text("SERVER RULES", NamedTextColor.GOLD));
+        for (int index = 0; index < serverRules.size(); index++) {
+            sender.sendMessage(Component.text((index + 1) + ". " + serverRules.get(index), NamedTextColor.YELLOW));
+        }
+        sender.sendMessage(Component.text("Use /rules to see this list again.", NamedTextColor.GRAY));
     }
 
     private void showStats(CommandSender sender, Player player) {
