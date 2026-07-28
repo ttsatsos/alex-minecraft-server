@@ -71,6 +71,15 @@ if [ -z "$PLUGIN_JAR" ]; then
 fi
 cp "$PLUGIN_JAR" "$SERVER_DIR/plugins/StatStealSmp.jar"
 
+echo "Building MonumentBuilder..."
+JAVA_HOME="$JAVA_HOME" "$MAVEN_BIN" -q -f "$ROOT/monument-builder-plugin/pom.xml" clean package
+MONUMENT_JAR="$(find "$ROOT/monument-builder-plugin/target" -maxdepth 1 -type f -name 'monument-builder-plugin-*.jar' | head -n 1)"
+if [ -z "$MONUMENT_JAR" ]; then
+  echo "MonumentBuilder build completed without producing the expected JAR."
+  exit 1
+fi
+cp "$MONUMENT_JAR" "$SERVER_DIR/plugins/MonumentBuilder.jar"
+
 if [ -n "${GEYSER_BIND_ADDRESS:-}" ]; then
   GEYSER_CONFIG="$SERVER_DIR/plugins/Geyser-Spigot/config.yml"
   python3 - "$GEYSER_CONFIG" "$GEYSER_BIND_ADDRESS" <<'PY'

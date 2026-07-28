@@ -42,7 +42,8 @@ for path in \
   "$SERVER_DIR/plugins/Floodgate-Spigot.jar" \
   "$SERVER_DIR/plugins/ViaVersion.jar" \
   "$SERVER_DIR/plugins/SkinsRestorer.jar" \
-  "$SERVER_DIR/plugins/SimpleVoiceChat.jar"
+  "$SERVER_DIR/plugins/SimpleVoiceChat.jar" \
+  "$SERVER_DIR/plugins/MonumentBuilder.jar"
 do
   if [ -e "$path" ]; then
     echo "[ok] $path"

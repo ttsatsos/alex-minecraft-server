@@ -1,0 +1,13 @@
+name: MonumentBuilder
+version: 0.1.0
+main: com.local.minecraft.monuments.MonumentBuilderPlugin
+api-version: '1.21'
+commands:
+  monument:
+    description: Build and manage generated monuments.
+    usage: /monument <build|visit|undo|status>
+permissions:
+  monument.admin:
+    default: op
+  monument.visit:
+    default: true

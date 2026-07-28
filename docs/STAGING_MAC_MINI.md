@@ -57,6 +57,23 @@ The voice server binds to the mini's Tailscale address on `24454/UDP`. Each Java
 client must be connected to Tailscale so it can reach that address. Bedrock
 players can continue using the server normally, but they cannot join voice chat.
 
+## Monument test site
+
+MonumentBuilder generates large structures in small batches to keep the server
+responsive. The first test structure is a roughly full-scale Statue of Liberty
+on an eleven-point island base in the overworld at `544, 63, 928`.
+
+Operators can use:
+
+```text
+/monument visit
+/monument status
+/monument undo
+```
+
+The undo command is available only during the same server session as the build.
+A world backup must be made before each permanent monument build.
+
 ## Cape compatibility test
 
 SkinsRestorer is installed server-side for Java/Floodgate cape testing. Its

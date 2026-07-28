@@ -1,0 +1,7 @@
+blocks-per-tick: 1200
+
+statue-of-liberty:
+  world: world
+  x: 544
+  y: 63
+  z: 928
