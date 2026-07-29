@@ -74,6 +74,28 @@ Operators can use:
 The undo command is available only during the same server session as the build.
 A world backup must be made before each permanent monument build.
 
+## Fantasy Magic Castle district
+
+The overworld includes Silveran666's Fantasy Magic Castle map as a physical
+chunk transplant. Players can visit it with:
+
+```text
+/castle
+```
+
+The imported map's original spawn is at `16000, 93, 16000`. Its generated
+footprint spans approximately `15648..16703` on X and `15648..16559` on Z. It
+was relocated by `1000` chunks on both axes with MCA Selector, including
+terrain, entities, and points of interest.
+
+Source: CurseForge project `1548133`, file `8115520`, Minecraft `1.21.4`.
+The source map is marked All Rights Reserved. Keep the downloaded and merged
+world data out of Git, and do not redistribute the merged world without the
+creator's permission.
+
+Cold backup immediately before the import:
+`backups/pre-fantasy-castle-20260728-173710.tar.gz`.
+
 ## Cape compatibility test
 
 SkinsRestorer is installed server-side for Java/Floodgate cape testing. Its

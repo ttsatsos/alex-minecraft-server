@@ -5,3 +5,9 @@ statue-of-liberty:
   x: 544
   y: 63
   z: 928
+
+fantasy-magic-castle:
+  world: world
+  x: 16000
+  y: 93
+  z: 16000

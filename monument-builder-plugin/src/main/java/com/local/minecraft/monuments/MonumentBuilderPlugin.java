@@ -33,10 +33,16 @@ public final class MonumentBuilderPlugin extends JavaPlugin implements TabExecut
             getCommand("monument").setExecutor(this);
             getCommand("monument").setTabCompleter(this);
         }
+        if (getCommand("castle") != null) {
+            getCommand("castle").setExecutor(this);
+        }
     }
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
+        if (command.getName().equalsIgnoreCase("castle")) {
+            return handleCastle(sender);
+        }
         if (args.length == 0) {
             showUsage(sender);
             return true;
@@ -135,6 +141,36 @@ public final class MonumentBuilderPlugin extends JavaPlugin implements TabExecut
                 180.0F, -8.0F);
         player.teleport(destination);
         player.sendMessage(Component.text("Welcome to the Statue of Liberty test site.", NamedTextColor.GREEN));
+        return true;
+    }
+
+    private boolean handleCastle(CommandSender sender) {
+        if (!(sender instanceof Player player)) {
+            sender.sendMessage("Only a player can use /castle.");
+            return true;
+        }
+        if (!sender.hasPermission("monument.castle")) {
+            sender.sendMessage(Component.text("You do not have permission.", NamedTextColor.RED));
+            return true;
+        }
+
+        String path = "fantasy-magic-castle.";
+        BuildSite site;
+        try {
+            site = createSite(
+                    getConfig().getString(path + "world", "world"),
+                    getConfig().getInt(path + "x", 16000),
+                    getConfig().getInt(path + "y", 93),
+                    getConfig().getInt(path + "z", 16000));
+        } catch (IllegalArgumentException exception) {
+            sender.sendMessage(Component.text(exception.getMessage(), NamedTextColor.RED));
+            return true;
+        }
+
+        Location destination = new Location(site.world(), site.x() + 0.5, site.y(), site.z() + 0.5,
+                0.0F, 0.0F);
+        player.teleport(destination);
+        player.sendMessage(Component.text("Welcome to the Fantasy Magic Castle.", NamedTextColor.LIGHT_PURPLE));
         return true;
     }
 
