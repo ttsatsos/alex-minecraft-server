@@ -44,7 +44,7 @@ stats:
     display-name: "Attack Damage"
   movement-speed:
     enabled: true
-    steal-amount: 0.01
+    steal-amount: 0.005
     min-value: 0.05
     max-value: 0.15
     display-name: "Movement Speed"
