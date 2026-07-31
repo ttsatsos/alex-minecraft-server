@@ -45,6 +45,7 @@ public final class StatStealPlugin extends JavaPlugin implements Listener {
     private final Map<java.util.UUID, Integer> restrictionMessageTicks = new HashMap<>();
     private PlayerStatStore store;
     private boolean requirePlayerKill;
+    private boolean allowCitizensNpcs;
     private boolean announceToServer;
     private boolean restoreHealthOnSteal;
     private boolean showRulesOnJoin;
@@ -65,6 +66,9 @@ public final class StatStealPlugin extends JavaPlugin implements Listener {
         store = new PlayerStatStore(new java.io.File(getDataFolder(), "player-stats.yml"));
         reloadPluginState();
         Bukkit.getPluginManager().registerEvents(this, this);
+        if (Bukkit.getPluginManager().isPluginEnabled("Citizens")) {
+            Bukkit.getPluginManager().registerEvents(new CitizensStatListener(this), this);
+        }
     }
 
     @Override
@@ -75,6 +79,7 @@ public final class StatStealPlugin extends JavaPlugin implements Listener {
     private void reloadPluginState() {
         reloadConfig();
         requirePlayerKill = getConfig().getBoolean("steal.require-player-kill", true);
+        allowCitizensNpcs = getConfig().getBoolean("steal.allow-citizens-npcs", true);
         announceToServer = getConfig().getBoolean("steal.announce-to-server", true);
         restoreHealthOnSteal = getConfig().getBoolean("steal.restore-health-on-steal", true);
         showRulesOnJoin = getConfig().getBoolean("rules.show-on-join", true);
@@ -186,10 +191,13 @@ public final class StatStealPlugin extends JavaPlugin implements Listener {
     public void onPlayerDeath(PlayerDeathEvent event) {
         Player victim = event.getPlayer();
         Player killer = victim.getKiller();
-        if (victim.hasMetadata("NPC")) {
+        boolean victimNpc = isNpc(victim);
+        boolean killerNpc = killer != null && isNpc(killer);
+        if ((victimNpc || killerNpc) && !allowCitizensNpcs) {
             return;
         }
-        if (isExcludedPlayer(victim) || (killer != null && isExcludedPlayer(killer))) {
+        if ((!victimNpc && isExcludedPlayer(victim))
+                || (killer != null && !killerNpc && isExcludedPlayer(killer))) {
             return;
         }
 
@@ -200,8 +208,7 @@ public final class StatStealPlugin extends JavaPlugin implements Listener {
         }
 
         boolean realPlayerKill = killer != null
-                && !killer.equals(victim)
-                && !killer.hasMetadata("NPC");
+                && !killer.equals(victim);
 
         if (realPlayerKill) {
             handlePlayerKill(killer, victim);
@@ -231,23 +238,28 @@ public final class StatStealPlugin extends JavaPlugin implements Listener {
             updateLevel(killer, chosen.stat(), 1);
         }
         updateLevel(victim, chosen.stat(), -1);
-        store.addPendingLoss(victim.getUniqueId(), new PendingStatLoss(
-                chosen.stat().configKey(), getLevel(victim, chosen.stat()), killer.getName()));
+        if (!isNpc(victim)) {
+            store.addPendingLoss(victim.getUniqueId(), new PendingStatLoss(
+                    chosen.stat().configKey(), getLevel(victim, chosen.stat()), killer.getName()));
+        }
         applyStats(killer, true);
         applyStats(victim, false);
         saveStore();
 
-        if (killerGained) {
+        if (killerGained && !isNpc(killer)) {
             killer.sendMessage(Component.text(messagePrefix + "You gained 1 " + chosen.displayName() + " stack ("
                     + formatChange(chosen.stat()) + ", level " + getLevel(killer, chosen.stat()) + "/" + MAX_LEVEL
                     + ") from killing " + victim.getName() + ".", NamedTextColor.GREEN));
             showStatTitle(killer, "STAT GAINED", chosen.displayName(), getLevel(killer, chosen.stat()), NamedTextColor.GREEN);
-        } else {
+        } else if (!isNpc(killer)) {
             killer.sendMessage(Component.text(messagePrefix + "The roll selected " + chosen.displayName()
                     + ", but you are already at the +" + MAX_LEVEL + " maximum.", NamedTextColor.YELLOW));
             showStatTitle(killer, "STAT MAXED", chosen.displayName(), MAX_LEVEL, NamedTextColor.YELLOW);
         }
-        victim.sendMessage(Component.text(messagePrefix + "You lost 1 " + chosen.displayName() + " stack to " + killer.getName() + ".", NamedTextColor.RED));
+        if (!isNpc(victim)) {
+            victim.sendMessage(Component.text(messagePrefix + "You lost 1 " + chosen.displayName()
+                    + " stack to " + killer.getName() + ".", NamedTextColor.RED));
+        }
         if (announceToServer) {
             String action = killerGained ? " stole 1 " : " rolled a maxed ";
             Bukkit.broadcast(Component.text(messagePrefix + killer.getName() + action + chosen.displayName()
@@ -325,6 +337,9 @@ public final class StatStealPlugin extends JavaPlugin implements Listener {
     }
 
     private void maybeBanIfAllCategoriesBottomedOut(Player player) {
+        if (isNpc(player)) {
+            return;
+        }
         boolean hasEnabledStat = false;
         for (ConfiguredStat config : configuredStats.values()) {
             if (!config.enabled()) {
@@ -375,6 +390,17 @@ public final class StatStealPlugin extends JavaPlugin implements Listener {
             }
         }
         return false;
+    }
+
+    private boolean isNpc(Player player) {
+        return player.hasMetadata("NPC");
+    }
+
+    void applyStoredStatsToNpc(Player npcPlayer) {
+        if (!allowCitizensNpcs) {
+            return;
+        }
+        Bukkit.getScheduler().runTask(this, () -> applyStats(npcPlayer, true));
     }
 
     private String normalizeName(String input) {

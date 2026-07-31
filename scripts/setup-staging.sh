@@ -19,6 +19,8 @@ SKINSRESTORER_URL="https://cdn.modrinth.com/data/TsLS8Py5/versions/wXS6bHiC/Skin
 SKINSRESTORER_SHA512="7819f6b1e8f8ddb2e86d3d3e54352dd040f381e9a094f8a9c80c7d3273ffd7b1cef6eca7369dcee4b0f5290e7837ef51cee1baeca906b3784f30d7ba2f58b7b4"
 VOICECHAT_URL="https://cdn.modrinth.com/data/9eGKb6K1/versions/62MVmInV/voicechat-bukkit-2.6.21.jar"
 VOICECHAT_SHA512="12a0ff0240e12bda82c10f2277c7bf3016c2a1833f8e73f338a61601cb555a2b18832041c902c81c4f8dd781993994fbd60d0336f443d92ff887933141a6f5a7"
+CITIZENS_URL="https://ci.citizensnpcs.co/job/Citizens2/lastStableBuild/artifact/dist/target/Citizens-2.0.43-b4231.jar"
+SENTINEL_URL="https://ci.citizensnpcs.co/job/Sentinel/lastStableBuild/artifact/target/Sentinel-2.9.4-SNAPSHOT-b534.jar"
 
 download() {
   local url="$1"
@@ -58,6 +60,8 @@ download "$SKINSRESTORER_URL" "$SERVER_DIR/plugins/SkinsRestorer.jar"
 echo "$SKINSRESTORER_SHA512  $SERVER_DIR/plugins/SkinsRestorer.jar" | shasum -a 512 -c -
 download "$VOICECHAT_URL" "$SERVER_DIR/plugins/SimpleVoiceChat.jar"
 echo "$VOICECHAT_SHA512  $SERVER_DIR/plugins/SimpleVoiceChat.jar" | shasum -a 512 -c -
+download "$CITIZENS_URL" "$SERVER_DIR/plugins/Citizens.jar"
+download "$SENTINEL_URL" "$SERVER_DIR/plugins/Sentinel.jar"
 
 JAVA_HOME="$(find "$RUNTIME_DIR" -maxdepth 1 -type d -name 'jdk-*' | sort -V | tail -n 1)/Contents/Home"
 MAVEN_BIN="$TOOLS_DIR/apache-maven-$MAVEN_VERSION/bin/mvn"
@@ -70,6 +74,15 @@ if [ -z "$PLUGIN_JAR" ]; then
   exit 1
 fi
 cp "$PLUGIN_JAR" "$SERVER_DIR/plugins/StatStealSmp.jar"
+
+echo "Building LocalAiNpc..."
+JAVA_HOME="$JAVA_HOME" "$MAVEN_BIN" -q -f "$ROOT/ai-npc-plugin/pom.xml" clean package
+AI_NPC_JAR="$(find "$ROOT/ai-npc-plugin/target" -maxdepth 1 -type f -name 'ai-npc-plugin-*.jar' | head -n 1)"
+if [ -z "$AI_NPC_JAR" ]; then
+  echo "LocalAiNpc build completed without producing the expected JAR."
+  exit 1
+fi
+cp "$AI_NPC_JAR" "$SERVER_DIR/plugins/LocalAiNpc.jar"
 
 echo "Building MonumentBuilder..."
 JAVA_HOME="$JAVA_HOME" "$MAVEN_BIN" -q -f "$ROOT/monument-builder-plugin/pom.xml" clean package

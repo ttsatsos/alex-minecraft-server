@@ -5,7 +5,7 @@
 
     <groupId>com.local.minecraft</groupId>
     <artifactId>ai-npc-plugin</artifactId>
-    <version>0.1.0</version>
+    <version>0.2.0</version>
     <packaging>jar</packaging>
 
     <properties>
@@ -29,13 +29,13 @@
         <dependency>
             <groupId>io.papermc.paper</groupId>
             <artifactId>paper-api</artifactId>
-            <version>1.21.8-R0.1-SNAPSHOT</version>
+            <version>1.21.11-R0.1-SNAPSHOT</version>
             <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>net.citizensnpcs</groupId>
             <artifactId>citizens-main</artifactId>
-            <version>2.0.41-SNAPSHOT</version>
+            <version>2.0.43-SNAPSHOT</version>
             <type>jar</type>
             <scope>provided</scope>
             <exclusions>
@@ -48,9 +48,8 @@
         <dependency>
             <groupId>org.mcmonkey</groupId>
             <artifactId>sentinel</artifactId>
-            <version>2.9.3-SNAPSHOT-b533</version>
-            <scope>system</scope>
-            <systemPath>${project.basedir}/../minecraft-server/plugins/Sentinel-2.9.3-SNAPSHOT-b533.jar</systemPath>
+            <version>2.9.4-SNAPSHOT</version>
+            <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>org.json</groupId>

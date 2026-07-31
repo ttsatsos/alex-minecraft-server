@@ -7,17 +7,23 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 import net.citizensnpcs.api.event.NPCRightClickEvent;
+import net.citizensnpcs.api.npc.NPC;
 import net.citizensnpcs.api.persistence.Persist;
 import net.citizensnpcs.api.trait.Trait;
 import net.citizensnpcs.api.trait.TraitName;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Location;
+import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.attribute.Attribute;
 import org.bukkit.attribute.AttributeInstance;
+import org.bukkit.entity.Entity;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
+import org.bukkit.event.player.PlayerTeleportEvent.TeleportCause;
+import org.bukkit.inventory.EntityEquipment;
+import org.bukkit.inventory.ItemStack;
 import org.bukkit.event.EventHandler;
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -51,6 +57,12 @@ public class AiCompanionTrait extends Trait {
 
     @Persist("wildMode")
     private boolean wildMode = false;
+
+    @Persist("frozen")
+    private boolean frozen = false;
+
+    @Persist("directedTarget")
+    private String directedTarget = "";
 
     @Persist("roamAnchorWorld")
     private String roamAnchorWorld = "";
@@ -129,6 +141,25 @@ public class AiCompanionTrait extends Trait {
         return wildMode;
     }
 
+    public String getModeName() {
+        if (frozen) {
+            return "frozen";
+        }
+        if (wildMode) {
+            return attackPlayers ? "roaming enemy" : "roaming";
+        }
+        if (followTarget != null && !followTarget.isBlank()) {
+            return guardOwner ? "guarding " + followTarget : "following " + followTarget;
+        }
+        return combatEnabled ? "ready" : "peaceful";
+    }
+
+    @Override
+    public void onSpawn() {
+        configureSentinelCombat();
+        equipDefaultLoadout();
+    }
+
     public boolean shouldHandle(Player player, String message) {
         String trimmed = message.trim();
         String lower = trimmed.toLowerCase();
@@ -171,7 +202,7 @@ public class AiCompanionTrait extends Trait {
     }
 
     public void tickFollow() {
-        if (wildMode || followTarget == null || followTarget.isBlank() || !npc.isSpawned()) {
+        if (frozen || wildMode || followTarget == null || followTarget.isBlank() || !npc.isSpawned()) {
             return;
         }
         Player player = Bukkit.getPlayerExact(followTarget);
@@ -180,19 +211,27 @@ public class AiCompanionTrait extends Trait {
         }
 
         Location npcLocation = npc.getStoredLocation();
-        if (npcLocation.distanceSquared(player.getLocation()) > 4) {
+        int followDistance = LocalAiNpcPlugin.getInstance().getFollowDistance();
+        if (npcLocation.distanceSquared(player.getLocation()) > (long) followDistance * followDistance) {
             npc.getNavigator().setTarget(player, true);
         }
     }
 
     public void tickCombat() {
-        if (!npc.isSpawned() || !combatEnabled) {
+        if (frozen || !npc.isSpawned() || !combatEnabled) {
+            return;
+        }
+        SentinelTrait sentinel = getSentinelTrait();
+        LivingEntity directed = getDirectedTarget();
+        if (sentinel != null && directed != null && !directed.isDead()) {
+            if (!sentinel.attackHelper.tryAttack(directed)) {
+                sentinel.attackHelper.chase(directed);
+            }
             return;
         }
         if (guardOwner && !ownerName.isBlank()) {
             Player owner = Bukkit.getPlayerExact(ownerName);
             if (owner != null && owner.isOnline()) {
-                SentinelTrait sentinel = getSentinelTrait();
                 if (sentinel != null && !owner.getUniqueId().equals(sentinel.getGuarding())) {
                     configureSentinelCombat();
                 }
@@ -201,7 +240,7 @@ public class AiCompanionTrait extends Trait {
     }
 
     public void tickWildBehavior(long currentTick) {
-        if (!wildMode || !npc.isSpawned()) {
+        if (frozen || !wildMode || !npc.isSpawned()) {
             return;
         }
         SentinelTrait sentinel = getSentinelTrait();
@@ -315,6 +354,8 @@ public class AiCompanionTrait extends Trait {
         attackMonsters = plugin.isAttackMonstersByDefault();
         attackPlayers = false;
         wildMode = false;
+        frozen = false;
+        directedTarget = "";
         configureSentinelCombat();
     }
 
@@ -326,10 +367,160 @@ public class AiCompanionTrait extends Trait {
         guardOwner = false;
         attackMonsters = true;
         attackPlayers = true;
+        frozen = false;
+        directedTarget = "";
         setRoamAnchor(worldSpawn);
         setRespawnPoint(worldSpawn);
         nextRoamTick = 0L;
         configureSentinelCombat();
+    }
+
+    public void setHome(Location location) {
+        setRoamAnchor(location);
+        setRespawnPoint(location);
+    }
+
+    public void follow(Player player) {
+        ownerName = player.getName();
+        followTarget = player.getName();
+        wildMode = false;
+        frozen = false;
+        combatEnabled = true;
+        guardOwner = false;
+        attackMonsters = false;
+        attackPlayers = false;
+        directedTarget = "";
+        configureSentinelCombat();
+    }
+
+    public void guard(Player player) {
+        ownerName = player.getName();
+        followTarget = player.getName();
+        wildMode = false;
+        frozen = false;
+        combatEnabled = true;
+        guardOwner = true;
+        attackMonsters = true;
+        attackPlayers = false;
+        directedTarget = "";
+        configureSentinelCombat();
+    }
+
+    public void roam(Location location) {
+        followTarget = "";
+        wildMode = true;
+        frozen = false;
+        combatEnabled = true;
+        guardOwner = false;
+        attackMonsters = true;
+        attackPlayers = false;
+        directedTarget = "";
+        setRoamAnchor(location);
+        setRespawnPoint(location);
+        nextRoamTick = 0L;
+        configureSentinelCombat();
+    }
+
+    public void attackPlayer(Player target) {
+        attackEntity(target);
+    }
+
+    public void attackNpc(NPC target) {
+        if (!target.isSpawned()) {
+            return;
+        }
+        attackEntity(target.getEntity());
+    }
+
+    private void attackEntity(Entity target) {
+        frozen = false;
+        combatEnabled = true;
+        guardOwner = false;
+        attackPlayers = false;
+        followTarget = "";
+        directedTarget = target.getUniqueId().toString();
+        configureSentinelCombat();
+        SentinelTrait sentinel = getSentinelTrait();
+        if (sentinel != null && target instanceof LivingEntity livingTarget) {
+            sentinel.addTarget("uuid:" + target.getUniqueId());
+            sentinel.targetingHelper.addTarget(target.getUniqueId());
+            sentinel.attackHelper.chase(livingTarget);
+        }
+    }
+
+    public void freeze() {
+        frozen = true;
+        combatEnabled = false;
+        followTarget = "";
+        directedTarget = "";
+        if (npc.isSpawned()) {
+            npc.getNavigator().cancelNavigation();
+        }
+        SentinelTrait sentinel = getSentinelTrait();
+        if (sentinel != null) {
+            sentinel.chasing = null;
+            sentinel.setGuarding((UUID) null);
+        }
+        configureSentinelCombat();
+    }
+
+    public void resetBot() {
+        Location home = getRespawnPoint();
+        frozen = false;
+        directedTarget = "";
+        if (!npc.isSpawned()) {
+            npc.spawn(home);
+        } else {
+            npc.getNavigator().cancelNavigation();
+            npc.teleport(home, TeleportCause.PLUGIN);
+        }
+        SentinelTrait sentinel = getSentinelTrait();
+        if (sentinel != null) {
+            sentinel.chasing = null;
+        }
+        configureSentinelCombat();
+        equipDefaultLoadout();
+        if (npc.getEntity() instanceof LivingEntity living) {
+            AttributeInstance maxHealth = living.getAttribute(Attribute.MAX_HEALTH);
+            if (maxHealth != null) {
+                living.setHealth(maxHealth.getValue());
+            }
+        }
+    }
+
+    public void equipDefaultLoadout() {
+        if (!(npc.getEntity() instanceof LivingEntity living)) {
+            return;
+        }
+        EntityEquipment equipment = living.getEquipment();
+        if (equipment == null) {
+            return;
+        }
+        if (equipment.getItemInMainHand().getType().isAir()) {
+            equipment.setItemInMainHand(new ItemStack(Material.IRON_SWORD));
+        }
+        if (equipment.getChestplate() == null || equipment.getChestplate().getType().isAir()) {
+            equipment.setChestplate(new ItemStack(Material.IRON_CHESTPLATE));
+        }
+        if (equipment.getLeggings() == null || equipment.getLeggings().getType().isAir()) {
+            equipment.setLeggings(new ItemStack(Material.IRON_LEGGINGS));
+        }
+        if (equipment.getBoots() == null || equipment.getBoots().getType().isAir()) {
+            equipment.setBoots(new ItemStack(Material.IRON_BOOTS));
+        }
+    }
+
+    private LivingEntity getDirectedTarget() {
+        if (directedTarget == null || directedTarget.isBlank()) {
+            return null;
+        }
+        try {
+            Entity target = Bukkit.getEntity(UUID.fromString(directedTarget));
+            return target instanceof LivingEntity living ? living : null;
+        } catch (IllegalArgumentException ignored) {
+            directedTarget = "";
+            return null;
+        }
     }
 
     public void configureSentinelCombat() {

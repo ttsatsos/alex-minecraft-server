@@ -1,5 +1,6 @@
 steal:
   require-player-kill: true
+  allow-citizens-npcs: true
   announce-to-server: true
   restore-health-on-steal: true
   message-prefix: "&6[StatSteal]&r "

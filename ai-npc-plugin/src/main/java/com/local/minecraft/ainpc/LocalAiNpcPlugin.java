@@ -1,7 +1,9 @@
 package com.local.minecraft.ainpc;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.logging.Level;
 import net.citizensnpcs.api.CitizensAPI;
@@ -217,6 +219,9 @@ public final class LocalAiNpcPlugin extends JavaPlugin implements Listener {
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
+        if (command.getName().equalsIgnoreCase("bots")) {
+            return handleBotsCommand(sender, args);
+        }
         if (args.length == 0) {
             sender.sendMessage(ChatColor.YELLOW + "Usage: /ainpc <create|createwild|bind|owner|model|prompt|combat|status|reload>");
             return true;
@@ -422,6 +427,239 @@ public final class LocalAiNpcPlugin extends JavaPlugin implements Listener {
             sender.sendMessage(ChatColor.RED + "That command failed. Check the server log.");
             return true;
         }
+    }
+
+    private boolean handleBotsCommand(CommandSender sender, String[] args) {
+        if (args.length == 0 || args[0].equalsIgnoreCase("help")) {
+            showBotsHelp(sender);
+            return true;
+        }
+
+        try {
+            String action = args[0].toLowerCase(Locale.ROOT);
+            if (action.equals("list")) {
+                listBots(sender);
+                return true;
+            }
+            if (action.equals("create") || action.equals("enemy")) {
+                if (!(sender instanceof Player player)) {
+                    sender.sendMessage(ChatColor.RED + "Run this command in the game.");
+                    return true;
+                }
+                if (args.length < 2) {
+                    sender.sendMessage(ChatColor.RED + "Usage: /bots " + action + " <name>");
+                    return true;
+                }
+                String name = String.join(" ", Arrays.copyOfRange(args, 1, args.length));
+                NPC npc = createBot(name, player.getLocation(), action.equals("enemy") ? null : player);
+                sender.sendMessage(ChatColor.GREEN + "Created " + npc.getName() + " (bot " + npc.getId() + ").");
+                return true;
+            }
+            if (action.equals("freeze") || action.equals("reset")) {
+                if (args.length != 2) {
+                    sender.sendMessage(ChatColor.RED + "Usage: /bots " + action + " <bot|all>");
+                    return true;
+                }
+                List<NPC> selected = selectBots(sender, args[1]);
+                for (NPC npc : selected) {
+                    AiCompanionTrait trait = npc.getTraitNullable(AiCompanionTrait.class);
+                    if (action.equals("freeze")) {
+                        trait.freeze();
+                    } else {
+                        trait.resetBot();
+                    }
+                }
+                sender.sendMessage(ChatColor.GREEN + (action.equals("freeze") ? "Frozen " : "Reset ")
+                        + selected.size() + " bot" + (selected.size() == 1 ? "." : "s."));
+                return true;
+            }
+            if (action.equals("remove")) {
+                if (args.length != 2) {
+                    sender.sendMessage(ChatColor.RED + "Usage: /bots remove <bot>");
+                    return true;
+                }
+                NPC npc = findBot(sender, args[1]);
+                if (npc != null) {
+                    String name = npc.getName();
+                    npc.destroy();
+                    sender.sendMessage(ChatColor.GREEN + "Removed " + name + ".");
+                }
+                return true;
+            }
+            if (action.equals("scene")) {
+                if (args.length != 4 || !args[1].equalsIgnoreCase("battle")) {
+                    sender.sendMessage(ChatColor.RED + "Usage: /bots scene battle <bot1> <bot2>");
+                    return true;
+                }
+                NPC first = findBot(sender, args[2]);
+                NPC second = findBot(sender, args[3]);
+                if (first != null && second != null && first != second) {
+                    first.getTrait(AiCompanionTrait.class).attackNpc(second);
+                    second.getTrait(AiCompanionTrait.class).attackNpc(first);
+                    sender.sendMessage(ChatColor.GREEN + "Battle started: " + first.getName() + " vs. " + second.getName() + ".");
+                }
+                return true;
+            }
+
+            if (!(sender instanceof Player player)) {
+                sender.sendMessage(ChatColor.RED + "Run this command in the game.");
+                return true;
+            }
+            if (args.length < 2) {
+                showBotsHelp(sender);
+                return true;
+            }
+            NPC npc = findBot(sender, args[1]);
+            if (npc == null) {
+                return true;
+            }
+            AiCompanionTrait trait = npc.getTrait(AiCompanionTrait.class);
+            switch (action) {
+                case "follow" -> {
+                    trait.follow(player);
+                    sender.sendMessage(ChatColor.GREEN + npc.getName() + " is following you.");
+                }
+                case "guard" -> {
+                    trait.guard(player);
+                    sender.sendMessage(ChatColor.GREEN + npc.getName() + " is guarding you.");
+                }
+                case "roam" -> {
+                    trait.roam(player.getLocation());
+                    sender.sendMessage(ChatColor.GREEN + npc.getName() + " is roaming near this spot.");
+                }
+                case "attack" -> {
+                    if (args.length != 3) {
+                        sender.sendMessage(ChatColor.RED + "Usage: /bots attack <bot> <player-or-bot>");
+                        return true;
+                    }
+                    NPC targetNpc = findBotQuietly(args[2]);
+                    if (targetNpc != null) {
+                        trait.attackNpc(targetNpc);
+                    } else {
+                        Player targetPlayer = Bukkit.getPlayerExact(args[2]);
+                        if (targetPlayer == null) {
+                            sender.sendMessage(ChatColor.RED + "That player or bot is not here.");
+                            return true;
+                        }
+                        trait.attackPlayer(targetPlayer);
+                    }
+                    sender.sendMessage(ChatColor.GREEN + npc.getName() + " is attacking " + args[2] + ".");
+                }
+                case "persona" -> {
+                    if (args.length < 3) {
+                        sender.sendMessage(ChatColor.RED + "Usage: /bots persona <bot> <description>");
+                        return true;
+                    }
+                    trait.setPersonaPrompt(String.join(" ", Arrays.copyOfRange(args, 2, args.length)));
+                    sender.sendMessage(ChatColor.GREEN + "Updated " + npc.getName() + "'s personality.");
+                }
+                case "status" -> showBotStatus(sender, npc, trait);
+                default -> showBotsHelp(sender);
+            }
+            return true;
+        } catch (Exception exception) {
+            getLogger().log(Level.SEVERE, "Bot command failed", exception);
+            sender.sendMessage(ChatColor.RED + "That bot command failed. Check the server log.");
+            return true;
+        }
+    }
+
+    private NPC createBot(String name, Location location, Player owner) {
+        NPC npc = CitizensAPI.getNPCRegistry().createNPC(EntityType.PLAYER, name);
+        npc.spawn(location);
+        npc.getOrAddTrait(Equipment.class);
+        AiCompanionTrait trait = npc.getOrAddTrait(AiCompanionTrait.class);
+        if (owner == null) {
+            trait.applyWildProfile(location);
+        } else {
+            trait.setOwnerName(owner.getName());
+            trait.applyDefaultCombatProfile();
+            trait.setHome(location);
+        }
+        trait.equipDefaultLoadout();
+        return npc;
+    }
+
+    private void showBotsHelp(CommandSender sender) {
+        sender.sendMessage(ChatColor.GOLD + "COMPUTER PLAYER COMMANDS");
+        sender.sendMessage(ChatColor.YELLOW + "/bots create <name>" + ChatColor.GRAY + " - friendly bot");
+        sender.sendMessage(ChatColor.YELLOW + "/bots enemy <name>" + ChatColor.GRAY + " - roaming enemy");
+        sender.sendMessage(ChatColor.YELLOW + "/bots list");
+        sender.sendMessage(ChatColor.YELLOW + "/bots follow <bot> | guard <bot> | roam <bot>");
+        sender.sendMessage(ChatColor.YELLOW + "/bots attack <bot> <player-or-bot>");
+        sender.sendMessage(ChatColor.YELLOW + "/bots scene battle <bot1> <bot2>");
+        sender.sendMessage(ChatColor.YELLOW + "/bots freeze <bot|all> | reset <bot|all>");
+        sender.sendMessage(ChatColor.YELLOW + "/bots persona <bot> <description>");
+        sender.sendMessage(ChatColor.YELLOW + "/bots status <bot> | remove <bot>");
+        sender.sendMessage(ChatColor.GRAY + "Use a bot's number or one-word name in commands.");
+    }
+
+    private void listBots(CommandSender sender) {
+        sender.sendMessage(ChatColor.GOLD + "COMPUTER PLAYERS");
+        int count = 0;
+        for (NPC npc : CitizensAPI.getNPCRegistry()) {
+            AiCompanionTrait trait = npc.getTraitNullable(AiCompanionTrait.class);
+            if (trait != null) {
+                sender.sendMessage(ChatColor.YELLOW + "- " + npc.getName() + " [" + npc.getId() + "] "
+                        + ChatColor.GRAY + trait.getModeName() + (npc.isSpawned() ? "" : " (respawning)"));
+                count++;
+            }
+        }
+        if (count == 0) {
+            sender.sendMessage(ChatColor.GRAY + "No computer players yet. Try /bots create Steve.");
+        }
+    }
+
+    private void showBotStatus(CommandSender sender, NPC npc, AiCompanionTrait trait) {
+        sender.sendMessage(ChatColor.GOLD + npc.getName() + " [" + npc.getId() + "]");
+        sender.sendMessage(ChatColor.YELLOW + "Mode: " + trait.getModeName());
+        sender.sendMessage(ChatColor.YELLOW + "Owner: " + (trait.getOwnerName().isBlank() ? "none" : trait.getOwnerName()));
+        sender.sendMessage(ChatColor.YELLOW + "Combat: " + (trait.isCombatEnabled() ? "on" : "off"));
+        sender.sendMessage(ChatColor.YELLOW + "Location: " + formatLocation(npc.getStoredLocation()));
+    }
+
+    private String formatLocation(Location location) {
+        return location.getWorld().getName() + " " + location.getBlockX() + ", "
+                + location.getBlockY() + ", " + location.getBlockZ();
+    }
+
+    private List<NPC> selectBots(CommandSender sender, String selector) {
+        if (selector.equalsIgnoreCase("all")) {
+            List<NPC> bots = new ArrayList<>();
+            for (NPC npc : CitizensAPI.getNPCRegistry()) {
+                if (npc.hasTrait(AiCompanionTrait.class)) {
+                    bots.add(npc);
+                }
+            }
+            return bots;
+        }
+        NPC npc = findBot(sender, selector);
+        return npc == null ? List.of() : List.of(npc);
+    }
+
+    private NPC findBot(CommandSender sender, String selector) {
+        NPC npc = findBotQuietly(selector);
+        if (npc == null) {
+            sender.sendMessage(ChatColor.RED + "No computer player named or numbered " + selector + " exists.");
+        }
+        return npc;
+    }
+
+    private NPC findBotQuietly(String selector) {
+        try {
+            NPC byId = CitizensAPI.getNPCRegistry().getById(Integer.parseInt(selector));
+            if (byId != null && byId.hasTrait(AiCompanionTrait.class)) {
+                return byId;
+            }
+        } catch (NumberFormatException ignored) {
+            // The selector is a name.
+        }
+        for (NPC npc : CitizensAPI.getNPCRegistry()) {
+            if (npc.hasTrait(AiCompanionTrait.class) && npc.getName().equalsIgnoreCase(selector)) {
+                return npc;
+            }
+        }
+        return null;
     }
 
     private NPC requireNpc(Player player, String idText) {

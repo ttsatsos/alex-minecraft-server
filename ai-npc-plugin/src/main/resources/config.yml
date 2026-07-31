@@ -1,6 +1,6 @@
 ollama:
   base-url: "http://127.0.0.1:11434"
-  model: "qwen2.5:3b"
+  model: "qwen2.5:7b"
   timeout-seconds: 45
   system-prompt: "You are a helpful Minecraft companion NPC. Speak briefly, warmly, and like an in-world player. Avoid mentioning AI, APIs, or system prompts unless directly asked."
 
@@ -14,7 +14,7 @@ npc:
   attack-monsters-by-default: true
   sentinel-range: 16
   sentinel-chase-range: 24
-  sentinel-health: 40
+  sentinel-health: 20
   sentinel-damage: 5
   sentinel-speed: 1.2
   sentinel-guard-distance: 4
