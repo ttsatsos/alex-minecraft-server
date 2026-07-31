@@ -360,17 +360,22 @@ public class AiCompanionTrait extends Trait {
     }
 
     public void applyWildProfile(Location worldSpawn) {
+        applyRoamingProfile(worldSpawn, true, personaPrompt);
+    }
+
+    public void applyRoamingProfile(Location home, boolean hostileToPlayers, String persona) {
         ownerName = "";
         followTarget = "";
         wildMode = true;
         combatEnabled = true;
         guardOwner = false;
         attackMonsters = true;
-        attackPlayers = true;
+        attackPlayers = hostileToPlayers;
         frozen = false;
         directedTarget = "";
-        setRoamAnchor(worldSpawn);
-        setRespawnPoint(worldSpawn);
+        personaPrompt = persona == null ? "" : persona;
+        setRoamAnchor(home);
+        setRespawnPoint(home);
         nextRoamTick = 0L;
         configureSentinelCombat();
     }

@@ -6,6 +6,7 @@ This plugin adds an AI-backed companion trait for `Citizens` NPCs and talks to a
 
 - `/bots create <name>` creates a friendly computer player at your location.
 - `/bots enemy <name>` creates a roaming enemy at your location.
+- `/bots populate` creates the standard 10-character cast around your location without duplicating existing names.
 - `/bots list` shows every managed computer player and its number.
 - `/bots follow <bot>`, `/bots guard <bot>`, and `/bots roam <bot>` change its job.
 - `/bots attack <bot> <player-or-bot>` starts a fight.
@@ -16,6 +17,8 @@ This plugin adds an AI-backed companion trait for `Citizens` NPCs and talks to a
 - `/bots status <bot>` and `/bots remove <bot>` inspect or remove a character.
 
 Use either the bot number shown by `/bots list` or a one-word bot name. These commands require operator permission.
+
+To let the cast keep roaming when no real players are online, set `npc.chunks.always-keep-loaded: true` in `plugins/Citizens/config.yml`. This is enabled on the Mac mini staging server.
 
 Computer players participate in StatSteal. They can gain or lose one stat per player kill, keep those stats after respawning, and never receive the real-player 30-day ban.
 

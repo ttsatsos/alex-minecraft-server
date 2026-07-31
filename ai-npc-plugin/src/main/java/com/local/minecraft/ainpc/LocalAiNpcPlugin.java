@@ -26,6 +26,18 @@ import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public final class LocalAiNpcPlugin extends JavaPlugin implements Listener {
+    private static final List<BotPreset> CAST_PRESETS = List.of(
+            new BotPreset("Nova", false, "A curious explorer who loves discovering strange places."),
+            new BotPreset("Brick", false, "A brave, dependable guard who speaks plainly."),
+            new BotPreset("Echo", false, "A friendly storyteller who exaggerates adventures for fun."),
+            new BotPreset("Sparks", false, "A playful prankster who jokes but never bullies anyone."),
+            new BotPreset("Willow", false, "A calm, kind teammate who tries to help everyone."),
+            new BotPreset("Atlas", false, "A bold adventurer who always wants to explore farther."),
+            new BotPreset("Pixel", false, "A creative builder who notices interesting structures."),
+            new BotPreset("Milo", false, "A cautious scout who warns others about danger."),
+            new BotPreset("Rogue", true, "A competitive rival who boasts after winning a fight."),
+            new BotPreset("Vex", true, "A clever rival who challenges strong players and respects good fights."));
+
     private static LocalAiNpcPlugin instance;
 
     private OllamaClient ollamaClient;
@@ -441,6 +453,15 @@ public final class LocalAiNpcPlugin extends JavaPlugin implements Listener {
                 listBots(sender);
                 return true;
             }
+            if (action.equals("populate")) {
+                Location center = sender instanceof Player player
+                        ? player.getLocation()
+                        : Bukkit.getWorlds().getFirst().getSpawnLocation();
+                int created = populateCast(center);
+                sender.sendMessage(ChatColor.GREEN + "Created " + created + " new cast member"
+                        + (created == 1 ? "." : "s.") + " Existing names were left alone.");
+                return true;
+            }
             if (action.equals("create") || action.equals("enemy")) {
                 if (!(sender instanceof Player player)) {
                     sender.sendMessage(ChatColor.RED + "Run this command in the game.");
@@ -584,6 +605,7 @@ public final class LocalAiNpcPlugin extends JavaPlugin implements Listener {
         sender.sendMessage(ChatColor.GOLD + "COMPUTER PLAYER COMMANDS");
         sender.sendMessage(ChatColor.YELLOW + "/bots create <name>" + ChatColor.GRAY + " - friendly bot");
         sender.sendMessage(ChatColor.YELLOW + "/bots enemy <name>" + ChatColor.GRAY + " - roaming enemy");
+        sender.sendMessage(ChatColor.YELLOW + "/bots populate" + ChatColor.GRAY + " - create the 10-character cast");
         sender.sendMessage(ChatColor.YELLOW + "/bots list");
         sender.sendMessage(ChatColor.YELLOW + "/bots follow <bot> | guard <bot> | roam <bot>");
         sender.sendMessage(ChatColor.YELLOW + "/bots attack <bot> <player-or-bot>");
@@ -608,6 +630,30 @@ public final class LocalAiNpcPlugin extends JavaPlugin implements Listener {
         if (count == 0) {
             sender.sendMessage(ChatColor.GRAY + "No computer players yet. Try /bots create Steve.");
         }
+    }
+
+    private int populateCast(Location center) {
+        int created = 0;
+        for (int index = 0; index < CAST_PRESETS.size(); index++) {
+            BotPreset preset = CAST_PRESETS.get(index);
+            if (findBotQuietly(preset.name()) != null) {
+                continue;
+            }
+            double angle = (Math.PI * 2 * index) / CAST_PRESETS.size();
+            double radius = 8 + (index % 3) * 4;
+            Location spawn = center.clone().add(Math.cos(angle) * radius, 0, Math.sin(angle) * radius);
+            World world = spawn.getWorld();
+            spawn.setY(world.getHighestBlockYAt(spawn) + 1.0);
+
+            NPC npc = CitizensAPI.getNPCRegistry().createNPC(EntityType.PLAYER, preset.name());
+            npc.spawn(spawn);
+            npc.getOrAddTrait(Equipment.class);
+            AiCompanionTrait trait = npc.getOrAddTrait(AiCompanionTrait.class);
+            trait.applyRoamingProfile(spawn, preset.hostile(), preset.persona());
+            trait.equipDefaultLoadout();
+            created++;
+        }
+        return created;
     }
 
     private void showBotStatus(CommandSender sender, NPC npc, AiCompanionTrait trait) {
@@ -660,6 +706,9 @@ public final class LocalAiNpcPlugin extends JavaPlugin implements Listener {
             }
         }
         return null;
+    }
+
+    private record BotPreset(String name, boolean hostile, String persona) {
     }
 
     private NPC requireNpc(Player player, String idText) {
